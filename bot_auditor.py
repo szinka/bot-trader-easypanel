@@ -1,9 +1,10 @@
-# bot_auditor.py
+# bot_cientista_v1.py
 from iqoptionapi.stable_api import IQ_Option
 import logging
 import time
+import random # Importamos a biblioteca para decisões aleatórias
 
-# Configuração básica
+# Configuração básica de logging para vermos tudo no EasyPanel
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 # --- CONEXÃO ---
@@ -11,72 +12,73 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 email = "szinkamiza@gmail.com"
 senha = "123lucas123" 
 
-print("Conectando à IQ Option...")
-Iq = IQ_Option(email, senha)
-Iq.connect()
+# Tenta conectar com um loop para resiliência
+while True:
+    Iq = IQ_Option(email, senha)
+    Iq.connect()
+    if Iq.check_connect():
+        logging.info(">>> Conexão bem-sucedida! <<<")
+        break
+    else:
+        logging.error("Falha na conexão, tentando novamente em 1 minuto...")
+        time.sleep(60)
 
-if Iq.check_connect():
-    print(">>> Conexão bem-sucedida! <<<")
-    Iq.change_balance("PRACTICE") 
-    print(f"Saldo inicial: ${Iq.get_balance()}")
-else:
-    print("Erro na conexão. Saindo...")
-    exit()
+Iq.change_balance("PRACTICE") 
+logging.info(f"Saldo inicial: ${Iq.get_balance()}")
 
-# --- LOOP DE ORDENS MANUAIS ---
-print("\n--- Painel de Controle 'Auditor' ---")
-print("Digite 'sair' a qualquer momento para fechar.")
+# --- CONFIGURAÇÕES DO BOT CIENTISTA ---
+ATIVO = "EURUSD-OTC"
+VALOR_ENTRADA = 1.0 # Valor fixo para cada operação
+DURACAO = 1 # Duração em minutos
+INTERVALO_ENTRE_TRADES = 10 # Segundos de espera entre o fim de uma operação e o início de outra
+
+# --- LOOP DE OPERAÇÃO AUTÔNOMA 24/7 ---
+logging.info(f"--- Iniciando loop de operações autônomas para o ativo {ATIVO} ---")
 
 while True:
-    ativo = input("Digite o ativo (ex: EURUSD-OTC): ").upper()
-    if ativo.lower() == 'sair': break
-
-    valor_investido = float(input("Digite o valor para investir (ex: 10): "))
-    if str(valor_investido).lower() == 'sair': break
-
-    acao = input("Digite a ação (call ou put): ").lower()
-    if acao.lower() == 'sair': break
-
-    duracao = int(input("Digite a duração em minutos (ex: 1): "))
-    if str(duracao).lower() == 'sair': break
-
-    # --- ### LÓGICA DO AUDITOR (SUA IDEIA) ### ---
-    
-    print("\n" + "="*40)
-    # 1. Pega o saldo ANTES da operação
-    saldo_anterior = Iq.get_balance()
-    print(f"Saldo ANTES da ordem: ${saldo_anterior}")
-    
-    print(f"Enviando ordem: {acao.upper()} em {ativo} | Valor ${valor_investido} | Duração {duracao} min...")
-    
-    check, order_id = Iq.buy(valor_investido, ativo, acao, duracao)
-
-    if check:
-        print(f">>> SUCESSO! Ordem enviada. ID: {order_id}")
+    try:
+        # 1. A "IA" decide a próxima ação (cara ou coroa)
+        acao = random.choice(["call", "put"])
         
-        print(f"Aguardando {duracao} minuto(s) para auditar o resultado...")
-        time.sleep(duracao * 60 + 5) # Espera a operação terminar + 5s de margem
+        logging.info("="*40)
+        logging.info(f"Iniciando nova operação...")
         
-        # 2. Pega o saldo DEPOIS da operação
-        saldo_posterior = Iq.get_balance()
-        print(f"Saldo DEPOIS da ordem: ${saldo_posterior}")
-        
-        # 3. Compara os saldos para deduzir o resultado
-        diferenca = round(saldo_posterior - saldo_anterior, 2)
+        # 2. Pega o saldo ANTES
+        saldo_anterior = Iq.get_balance()
+        logging.info(f"Saldo ANTES: ${saldo_anterior} | Decisão da IA: {acao.upper()}")
 
-        print("\n--- RESULTADO DA AUDITORIA ---")
-        if diferenca > 0:
-            print(f"Resultado: WIN (Lucro: +${diferenca})")
-        elif diferenca < 0:
-            print(f"Resultado: LOSS (Perda: ${diferenca})")
+        # 3. Envia a ordem
+        check, order_id = Iq.buy(VALOR_ENTRADA, ATIVO, acao, DURACAO)
+
+        if check:
+            logging.info(f"Ordem enviada com sucesso. ID: {order_id}. Aguardando {DURACAO} min...")
+            
+            # 4. Espera a operação terminar
+            time.sleep(DURACAO * 60 + 5) # Espera a duração + 5s de margem
+            
+            # 5. Pega o saldo DEPOIS
+            saldo_posterior = Iq.get_balance()
+            
+            # 6. Audita e registra o resultado
+            diferenca = round(saldo_posterior - saldo_anterior, 2)
+            
+            resultado_final = "EMPATE"
+            if diferenca > 0:
+                resultado_final = "WIN"
+            elif diferenca < 0:
+                resultado_final = "LOSS"
+
+            logging.info(f"### RESULTADO ### Ativo: {ATIVO}, Ação: {acao.upper()}, Resultado: {resultado_final}, Lucro/Perda: ${diferenca}, Saldo Final: ${saldo_posterior}")
+
         else:
-            print("Resultado: EMPATE ($0.00)")
-        print("="*40 + "\n")
+            logging.error(f"Falha ao enviar ordem para o ativo {ATIVO}.")
 
-    else:
-        print(">>> FALHA! A ordem não pôde ser enviada.")
-    
-    print("-" * 30)
+        # 7. Espera antes da próxima operação
+        logging.info(f"Aguardando {INTERVALO_ENTRE_TRADES} segundos para o próximo ciclo.")
+        logging.info("="*40 + "\n")
+        time.sleep(INTERVALO_ENTRE_TRADES)
 
-print("\n--- Painel de Controle Finalizado ---")
-input("Pressione Enter para fechar...")
+    except Exception as e:
+        logging.error(f"Ocorreu um erro inesperado no loop principal: {e}")
+        logging.info("Aguardando 1 minuto antes de tentar novamente...")
+        time.sleep(60)
