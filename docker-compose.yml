@@ -1,0 +1,9 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  bot-trader:
+    build: .
+    # Esta é a política mais importante: garante que o bot reinicie
+    # automaticamente se ele parar por algum motivo ou se o servidor for reiniciado.
+    restart: unless-stopped
