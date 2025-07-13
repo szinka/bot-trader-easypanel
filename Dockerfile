@@ -22,4 +22,4 @@ COPY . .
 
 # 7. Define o comando que será executado para iniciar o bot
 # ATENÇÃO: Verifique se 'bot_auditor.py' é o nome exato do seu script!
-CMD ["python", "-u", "bot_auditor.py"]
+CMD ["python", "-u", "bot_api.py"]
