@@ -7,7 +7,7 @@ class GerenciamentoTorreMK:
         Inicializa o gerenciador com base na especificação.
         """
         self.config = {
-            'entry_percentage': config.get('entry_percentage', 10.0),
+            'entry_percentage': config.get('entry_percentage', 5.0),
             'wins_to_level_up': config.get('wins_to_level_up', 5),
             'loss_compensation': config.get('loss_compensation', 1)
         }
