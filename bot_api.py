@@ -91,9 +91,25 @@ def rota_de_trade():
         
         return jsonify({"status": "sucesso", "resultado": resultado_final, "lucro": diferenca})
 
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+# COLOQUE ESTE BLOCO NO LUGAR
+logging.info(f"Executando ordem: {acao.upper()} em {ativo} | Entrada: ${valor_investido}")
 
+# --- ### LÓGICA DE TENTATIVA DUPLA ### ---
+
+# Tenta primeiro como OPÇÃO BINÁRIA (o padrão)
+check, order_id = Iq.buy(valor_investido, ativo, acao, duracao)
+
+if not check:
+    logging.warning(f"Ordem BINÁRIA para {ativo} foi rejeitada. Tentando como DIGITAL...")
+    # Se a Binária falhar, tenta como DIGITAL
+    check, order_id = Iq.buy_digital_spot(ativo, valor_investido, acao, duracao)
+
+# Se a Digital também falhar, aí sim retornamos o erro.
+if not check:
+    logging.error(f"FALHA! Ordem para {ativo} foi rejeitada em ambas as modalidades (Binária e Digital).")
+    return jsonify({"status": "erro", "mensagem": f"Ordem para '{ativo}' rejeitada em ambas as modalidades"}), 400
+    
+# --- ### FIM DA LÓGICA DE TENTATIVA DUPLA ### ---
 # --- ROTA DE DIAGNÓSTICO PARA LISTAR ATIVOS ---
 @app.route('/ativos', methods=['GET'])
 def listar_ativos_abertos():
