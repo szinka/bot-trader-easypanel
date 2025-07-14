@@ -91,36 +91,7 @@ def rota_de_trade():
         
         return jsonify({"status": "sucesso", "resultado": resultado_final, "lucro": diferenca})
 
-logging.info(f"Executando ordem: {acao.upper()} em {ativo} | Entrada: ${valor_investido}")
-check, order_id = Iq.buy(valor_investido, ativo, acao, duracao)
-
-if not check:
-    return jsonify({"status": "erro", "mensagem": "Ordem rejeitada"}), 500
-
-# --- ROTA DE DIAGNÓSTICO PARA LISTAR ATIVOS ---
-@app.route('/ativos', methods=['GET'])
-def listar_ativos_abertos():
-    logging.info("Recebida requisição para listar ativos abertos...")
-    try:
-        # Pega todos os ativos abertos da IQ Option
-        ativos = Iq.get_all_open_time()
-
-        # Filtra apenas os ativos de opções binárias que estão abertos
-        ativos_binarios_abertos = []
-        for ativo_nome in ativos["binary"]:
-            if ativos["binary"][ativo_nome]["open"]:
-                ativos_binarios_abertos.append(ativo_nome)
-
-        logging.info(f"Encontrados {len(ativos_binarios_abertos)} ativos binários abertos.")
-
-        return jsonify({
-            "status": "sucesso",
-            "total_abertos": len(ativos_binarios_abertos),
-            "ativos": ativos_binarios_abertos
-        })
-
     except Exception as e:
-        logging.error(f"Erro ao listar ativos: {e}")
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 # --- Seção 3: Inicia o Servidor ---

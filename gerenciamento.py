@@ -1,100 +1,54 @@
-# bot_api.py (Versão Final com Banco de Dados)
-from flask import Flask, request, jsonify
-from iqoptionapi.stable_api import IQ_Option
-import logging
-import time
-from gerenciamento import GerenciamentoTorreMK
-import database # <<< IMPORTA NOSSO NOVO MÓDULO
+# gerenciamento.py (Versão Final - Spec-Compliant)
+import math
 
-# --- Seção 1: Configurações e Conexão ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-app = Flask(__name__)
-
-config_gerenciamento = {
-    'entry_percentage': 10.0,
-    'wins_to_level_up': 5,
-    'loss_compensation': 1
-}
-
-email = "szinkamiza@gmail.com"
-senha = "123lucas123" 
-
-logging.info("Iniciando Bot API...")
-# Conecta ao Banco de Dados PRIMEIRO
-db_conn = database.get_db_connection()
-# Garante que as tabelas existam
-database.setup_database(db_conn)
-
-# Conecta à IQ Option
-Iq = IQ_Option(email, senha)
-Iq.connect()
-
-if not Iq.check_connect():
-    logging.error("Falha crítica na conexão com IQ Option.")
-    exit()
-
-Iq.change_balance("PRACTICE")
-saldo_inicial_banca = Iq.get_balance()
-logging.info(f"Conexão bem-sucedida. Saldo inicial: ${saldo_inicial_banca}")
-
-# --- CRIA E CARREGA O ESTADO DO GERENCIADOR ---
-# Tenta carregar o estado salvo do banco de dados
-estado_salvo = database.carregar_estado(db_conn)
-# Inicia o gerenciador com o saldo atual
-gerenciador = GerenciamentoTorreMK(saldo_inicial_banca, config_gerenciamento)
-
-# Se encontrou um estado salvo, atualiza o gerenciador
-if estado_salvo:
-    gerenciador.total_wins, gerenciador.level_entries = estado_salvo
-
-logging.info(f"Gerenciador 'Torre MK' iniciado. Estado: {gerenciador.total_wins} wins. Próxima entrada: ${gerenciador.get_proxima_entrada()}")
-
-# --- Seção 2: A Rota da API ---
-@app.route('/trade', methods=['POST'])
-def rota_de_trade():
-    try:
-        sinal_do_n8n = request.get_json()
-        ativo = sinal_do_n8n['ativo']
-        acao = sinal_do_n8n['acao']
-        duracao = int(sinal_do_n8n['duracao'])
-
-        saldo_anterior = Iq.get_balance()
-        valor_investido = gerenciador.get_proxima_entrada()
-        if valor_investido < 1: valor_investido = 1.0
-
-        logging.info(f"Executando ordem: {acao.upper()} em {ativo} | Entrada: ${valor_investido}")
-        check, order_id = Iq.buy(valor_investido, ativo, acao, duracao)
-
-        if not check:
-            return jsonify({"status": "erro", "mensagem": "Ordem rejeitada"}), 500
-
-        time.sleep(duracao * 60 + 5)
-        saldo_posterior = Iq.get_balance()
-        diferenca = round(saldo_posterior - saldo_anterior, 2)
-        resultado_final = "WIN" if diferenca > 0 else "LOSS"
-        
-        gerenciador.processar_resultado(resultado_final, saldo_posterior)
-        logging.info(f"RESULTADO: {resultado_final} | Lucro/Perda: ${diferenca}")
-
-        # --- ### LÓGICA DE BANCO DE DADOS ### ---
-        # 1. Prepara os dados do trade
-        trade_info = {
-            'ativo': ativo, 'acao': acao, 'resultado': resultado_final, 'lucro': diferenca,
-            'valor_investido': valor_investido, 'saldo_final': saldo_posterior
+class GerenciamentoTorreMK:
+    def __init__(self, banca_inicial, config):
+        """
+        Inicializa o gerenciador com base na especificação.
+        """
+        self.config = {
+            'entry_percentage': config.get('entry_percentage', 5.0),
+            'wins_to_level_up': config.get('wins_to_level_up', 5),
+            'loss_compensation': config.get('loss_compensation', 1)
         }
-        # 2. Salva o trade individual
-        database.salvar_trade(db_conn, trade_info)
+        self.total_wins = 0
+        self.level_entries = {} # Dicionário para armazenar as entradas de cada nível
 
-        # 3. Salva o novo estado do gerenciamento
-        database.salvar_estado(db_conn, gerenciador.total_wins, gerenciador.level_entries)
-        # --- ### FIM DA LÓGICA DB ### ---
+        # Inicializa a entrada para o Nível 1, como manda a especificação
+        entry_lvl_1 = round(banca_inicial * (self.config['entry_percentage'] / 100), 2)
+        self.level_entries[1] = max(1.0, entry_lvl_1) # Garante que a entrada mínima seja $1
+
+    def _get_level_from_wins(self, wins):
+        """Calcula o nível com base em um número de vitórias."""
+        return math.floor(max(0, wins) / self.config['wins_to_level_up']) + 1
+
+    def get_proxima_entrada(self):
+        """Retorna o valor da entrada para a operação atual."""
+        nivel_atual = self._get_level_from_wins(self.total_wins)
+        return self.level_entries.get(nivel_atual, 1.0) # Retorna $1 como padrão de segurança
+
+    def processar_resultado(self, resultado, banca_atual):
+        """
+        Processa o resultado de um trade (win/loss) e atualiza o estado
+        do gerenciamento para a próxima operação.
+        """
+        nivel_antigo = self._get_level_from_wins(self.total_wins)
+
+        if resultado.lower() == 'win':
+            self.total_wins += 1
+        else: # loss ou empate
+            self.total_wins = max(0, self.total_wins - self.config['loss_compensation'])
         
-        return jsonify({"status": "sucesso", "resultado": resultado_final, "lucro": diferenca})
+        nivel_novo = self._get_level_from_wins(self.total_wins)
 
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-# --- Seção 3: Inicia o Servidor ---
-if __name__ == '__main__':
-    logging.info("Servidor API com persistência de dados iniciado. Aguardando na porta 80.")
-    app.run(host='0.0.0.0', port=80)
+        # Regra: Se houve queda de nível, apaga as entradas dos níveis superiores
+        if nivel_novo < nivel_antigo:
+            niveis_a_remover = [lvl for lvl in self.level_entries if lvl > nivel_novo]
+            for lvl in niveis_a_remover:
+                del self.level_entries[lvl]
+        
+        # Regra: Se o novo nível ainda não tem uma entrada definida, calcula e armazena
+        if nivel_novo not in self.level_entries:
+            percentual = self.config['entry_percentage'] / 100
+            nova_entrada = round(banca_atual * percentual, 2)
+            self.level_entries[nivel_novo] = max(1.0, nova_entrada)
