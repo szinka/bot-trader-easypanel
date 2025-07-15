@@ -4,17 +4,21 @@ FROM python:3.11-slim
 # Define o diretório de trabalho dentro do container
 WORKDIR /app
 
+# ---- ADIÇÃO IMPORTANTE ----
+# Atualiza os pacotes e instala o Git
+RUN apt-get update && apt-get install -y git
+
 # Copia o arquivo de dependências primeiro para aproveitar o cache do Docker
 COPY requirements.txt .
 
-# Instala as dependências
+# Instala as dependências do Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia todo o resto do projeto para o diretório de trabalho
 COPY . .
 
 # Expõe a porta que o gunicorn vai usar
-EXPOSE 8080
+EXPOSE 80
 
 # Dá permissão de execução ao script de start
 RUN chmod +x ./start.sh
