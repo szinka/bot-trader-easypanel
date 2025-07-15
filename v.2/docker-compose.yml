@@ -1,0 +1,11 @@
+# docker-compose.yml (Versão com Mapeamento de Porta)
+version: '3.8'
+
+services:
+  bot-trader:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Mapeia a porta 8080 do servidor (externa)
+      # para a porta 80 de dentro do container do bot (interna)
+      - "8080:80"
