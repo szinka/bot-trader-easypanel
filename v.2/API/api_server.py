@@ -90,3 +90,8 @@ def rota_de_trade():
     except Exception as e:
         logging.error(f"Erro na rota /trade: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
+@app.route('/ping', methods=['GET'])
+def rota_de_ping():
+    """Uma rota de teste extremamente simples para verificar se o servidor está no ar e o código atualizado."""
+    return jsonify({"status": "sucesso", "mensagem": "pong"})
