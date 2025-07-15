@@ -1,24 +1,24 @@
-# database.py
+# API/database.py
 import psycopg2
 import logging
 import json
+import os
 
-# URL de conexão que você forneceu
-DATABASE_URL = "postgres://teste:dbfafd3ad79f44b4da88@chatwoot_teste:5432/teste?sslmode=disable"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
-    """Cria e retorna uma conexão com o banco de dados."""
+    if not DATABASE_URL:
+        logging.critical("Variável de ambiente DATABASE_URL não definida.")
+        return None
     try:
         conn = psycopg2.connect(DATABASE_URL)
         return conn
     except psycopg2.OperationalError as e:
-        logging.error(f"ERRO CRÍTICO AO CONECTAR AO DB: {e}")
+        logging.critical(f"ERRO CRÍTICO AO CONECTAR AO DB: {e}")
         return None
 
 def setup_database(conn):
-    """Cria as tabelas 'trades' и 'estado_gerenciamento' se elas não existirem."""
     if not conn: return
-    
     commands = (
         """
         CREATE TABLE IF NOT EXISTS estado_gerenciamento (
@@ -51,9 +51,7 @@ def setup_database(conn):
         conn.rollback()
 
 def carregar_estado(conn):
-    """Carrega o último estado do gerenciador a partir do banco de dados."""
     if not conn: return None
-    
     sql = "SELECT total_wins, level_entries_json FROM estado_gerenciamento WHERE id = 1;"
     try:
         with conn.cursor() as cur:
@@ -66,15 +64,12 @@ def carregar_estado(conn):
                 return total_wins, level_entries
     except Exception as e:
         logging.error(f"Erro ao carregar estado do DB: {e}")
-    
     logging.info("Nenhum estado salvo encontrado. Começando um novo.")
     return None
 
 def salvar_estado(conn, total_wins, level_entries):
-    """Salva (ou atualiza) o estado atual do gerenciador no banco de dados."""
     if not conn: return
     level_entries_json = json.dumps(level_entries)
-    
     sql = """
         INSERT INTO estado_gerenciamento (id, total_wins, level_entries_json)
         VALUES (1, %s, %s)
@@ -92,9 +87,7 @@ def salvar_estado(conn, total_wins, level_entries):
         conn.rollback()
 
 def salvar_trade(conn, trade_info):
-    """Salva os detalhes de um trade concluído no banco de dados."""
     if not conn: return
-    
     sql = """
         INSERT INTO trades (ativo, acao, resultado, lucro, valor_investido, saldo_final)
         VALUES (%(ativo)s, %(acao)s, %(resultado)s, %(lucro)s, %(valor_investido)s, %(saldo_final)s);
