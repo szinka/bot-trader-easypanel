@@ -100,3 +100,44 @@ def salvar_trade(conn, trade_info):
     except Exception as e:
         logging.error(f"Erro ao salvar trade no DB: {e}")
         conn.rollback()
+
+def get_historico_trades(conn):
+    """Busca todos os trades registrados no banco de dados."""
+    if not conn: return []
+    sql = "SELECT id, timestamp, ativo, acao, resultado, lucro, valor_investido, saldo_final FROM trades ORDER BY timestamp DESC;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            trades = cur.fetchall()
+            # Converte os resultados para uma lista de dicionários para facilitar o uso na API
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row)) for row in trades]
+    except Exception as e:
+        logging.error(f"Erro ao buscar histórico de trades: {e}")
+        return []
+
+def resetar_historico_trades(conn):
+    """Apaga todos os registros da tabela de trades."""
+    if not conn: return
+    sql = "TRUNCATE TABLE trades RESTART IDENTITY;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        logging.info("Histórico de trades foi resetado.")
+    except Exception as e:
+        logging.error(f"Erro ao resetar histórico de trades: {e}")
+        conn.rollback()
+
+def resetar_estado_gerenciamento(conn):
+    """Apaga o estado de gerenciamento salvo."""
+    if not conn: return
+    sql = "DELETE FROM estado_gerenciamento WHERE id = 1;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        logging.info("Estado de gerenciamento foi resetado.")
+    except Exception as e:
+        logging.error(f"Erro ao resetar estado de gerenciamento: {e}")
+        conn.rollback()

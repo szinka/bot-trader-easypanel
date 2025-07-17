@@ -18,8 +18,17 @@ class Trader:
         if not self.api.check_connect():
             raise ConnectionError("Falha na conexão com a IQ Option")
         
-        self.api.change_balance("PRACTICE")
-        logging.info(f"Conexão com IQ Option bem-sucedida. Saldo: ${self.get_saldo()}")
+        # Define a conta de prática como padrão na inicialização
+        self.selecionar_conta("PRACTICE")
+        logging.info(f"Conexão com IQ Option bem-sucedida. Saldo inicial (PRACTICE): ${self.get_saldo()}")
+
+    def selecionar_conta(self, tipo_conta):
+        """Muda o tipo de conta para 'REAL' ou 'PRACTICE'."""
+        if tipo_conta.upper() not in ["REAL", "PRACTICE"]:
+            raise ValueError("Tipo de conta inválido. Use 'REAL' ou 'PRACTICE'.")
+        
+        self.api.change_balance(tipo_conta.upper())
+        logging.info(f"Conta alterada para: {tipo_conta.upper()}")
 
     def get_saldo(self):
         return self.api.get_balance()
