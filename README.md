@@ -90,8 +90,11 @@ LOSS_COMPENSATION=1           # Compensação de perdas
 ## 🚀 Execução
 
 ```bash
-# Inicie o servidor
+# Inicie o servidor para desenvolvimento
 python main.py
+
+# Ou para produção (recomendado)
+gunicorn -b 0.0.0.0:8080 API.api_server:app
 
 # Ou com Docker
 docker-compose up -d

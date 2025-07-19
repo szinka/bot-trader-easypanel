@@ -27,4 +27,4 @@ RUN mkdir -p /app/logs
 EXPOSE 8080
 
 # Comando para iniciar a aplicação
-CMD ["python", "main.py"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "API.api_server:app"]
