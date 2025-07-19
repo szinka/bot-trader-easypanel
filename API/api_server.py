@@ -131,11 +131,7 @@ def rota_de_trade():
 
         # Determina a ação (call/put)
         acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
-        if acao == 'call':
-            acao = 'call'
-        elif acao == 'put':
-            acao = 'put'
-        else:
+        if acao not in ['call', 'put']:
             return jsonify({"status": "erro", "mensagem": "Ação deve ser 'call' ou 'put'"}), 400
         
         # Executa a ordem

@@ -227,6 +227,24 @@ GET /status
 }
 ```
 
+## 🧪 Testes Automáticos
+
+### Teste Completo da API
+```bash
+# Testa todos os endpoints automaticamente
+python API/test_all_endpoints.py
+```
+
+Este script testa:
+- ✅ Status da API (`/status`)
+- ✅ Consulta de saldo (`/balance`)
+- ✅ Busca de candles (`/get_candles`)
+- ✅ Execução de trades (`/trade`)
+- ✅ Histórico de trades (`/history`)
+- ✅ Gerenciamento (`/management`)
+
+---
+
 ## 🎯 Como Usar o Bot
 
 ### 1. **Configuração Inicial**
