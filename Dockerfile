@@ -5,6 +5,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Define o diretório de trabalho
