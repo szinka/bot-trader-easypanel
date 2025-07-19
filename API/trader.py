@@ -22,8 +22,8 @@ class Trader:
     def conectar_iq_option(self, email, senha):
         logging.info(f"Conectando à IQ Option com email: {email}")
         try:
-            # Versão 8.8.8 do iqoptionapi
-            self.api = IQ_Option(email, senha)
+            # Versão 0.5 do iqoptionapi
+            self.api = IQ_Option(username=email, password=senha, host="iqoption.com")
             
             # Conecta à API
             logging.info("Tentando conectar à API...")
