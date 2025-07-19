@@ -63,6 +63,7 @@ class Trader:
             return None
             
         try:
+            # Versão 6.8.9: get_candles(ativo, timeframe, quantidade, endtime)
             candles = self.api.get_candles(ativo, timeframe * 60, quantidade, time.time())
             return candles
         except Exception as e:
@@ -76,6 +77,7 @@ class Trader:
         try:
             logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
             
+            # Versão 6.8.9: buy(amount, asset, action, duration)
             if acao.lower() == "call":
                 check, order_id = self.api.buy(valor, ativo, "call", duracao)
             else:

@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 import logging
 import os
 import time
+import decimal
 from dotenv import load_dotenv
 
 # Carrega as variáveis de ambiente
@@ -270,9 +271,6 @@ def rota_get_saldos():
         })
     except Exception as e:
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-# Importação para Decimal
-import decimal
 
 # --- API Status ---
 @app.route('/', methods=['GET'])
