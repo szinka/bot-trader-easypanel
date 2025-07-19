@@ -1,7 +1,7 @@
 # API/trader.py
 import logging
 import os
-from iqoptionapi.api import IQOptionAPI as IQ_Option
+from iqoptionapi.stable_api import IQ_Option
 import time
 
 class Trader:
@@ -22,7 +22,7 @@ class Trader:
     def conectar_iq_option(self, email, senha):
         logging.info(f"Conectando à IQ Option com email: {email}")
         try:
-            # Versão mais recente do iqoptionapi
+            # Versão 6.8.9 do iqoptionapi
             self.api = IQ_Option(email, senha)
             
             # Conecta à API
@@ -56,15 +56,7 @@ class Trader:
     def get_saldo(self):
         if not self.api:
             return 0
-        try:
-            # Versão 6.8.9.1 usa métodos diferentes
-            return self.api.get_balance()
-        except:
-            try:
-                # Método alternativo
-                return self.api.get_balance_mode()
-            except:
-                return 0
+        return self.api.get_balance()
     
     def get_candles(self, ativo, timeframe, quantidade):
         if not self.api:
