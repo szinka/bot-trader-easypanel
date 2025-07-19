@@ -1,7 +1,7 @@
 # API/trader.py
 import logging
 import os
-from iqoptionapi.api import IQOptionAPI as IQ_Option
+from iqoptionapi.stable_api import IQ_Option
 import time
 
 class Trader:
