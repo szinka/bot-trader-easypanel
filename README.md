@@ -1,15 +1,37 @@
-# 🤖 Bot Trader - Sistema de Trading Automatizado
+# 🤖 Bot Trader - API de Trading Automatizado
 
-Sistema completo de trading automatizado com interface web, API REST e integração IQ Option.
+> **Sistema completo de trading automatizado integrado com IQ Option**
 
-## 🚀 Instalação e Execução
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
+[![EasyPanel](https://img.shields.io/badge/EasyPanel-Deploy-orange.svg)](https://easypanel.io)
 
-### Pré-requisitos
-- Python 3.11+
-- Docker (opcional)
+## 🚀 Visão Geral
+
+Bot Trader é uma API REST completa para execução automatizada de trades na IQ Option. O sistema inclui gerenciamento de risco, histórico de operações, múltiplas contas (Real/Practice) e interface de monitoramento.
+
+### ✨ Características
+
+- 🔐 **Autenticação IQ Option** - Conexão segura com a plataforma
+- 💰 **Gerenciamento de Risco** - Controle automático de entradas
+- 📊 **Múltiplas Contas** - Suporte para conta Real e Practice
+- 🗄️ **Banco PostgreSQL** - Histórico completo de trades
+- 📈 **Monitoramento** - Logs detalhados e métricas
+- 🐳 **Docker Ready** - Deploy simplificado
+- 🌐 **API REST** - Endpoints padronizados
+
+## 📋 Pré-requisitos
+
+- Python 3.8+
+- PostgreSQL
 - Conta IQ Option
+- Docker (opcional)
 
-### Instalação Local
+## 🛠️ Instalação
+
+### Método 1: Local
+
 ```bash
 # Clone o repositório
 git clone https://github.com/szinka/bot-trader-easypanel.git
@@ -21,283 +43,305 @@ pip install -r requirements.txt
 # Configure as variáveis de ambiente
 cp env.example .env
 # Edite o arquivo .env com suas credenciais
-
-# Execute o servidor
-python main.py
 ```
 
-### Docker
+### Método 2: Docker
+
 ```bash
-# Build da imagem
-docker build -t bot-trader .
+# Clone e execute com Docker Compose
+git clone https://github.com/szinka/bot-trader-easypanel.git
+cd bot-trader-easypanel
 
-# Executar container
-docker run -p 8080:8080 --env-file .env bot-trader
+# Configure o .env
+cp env.example .env
+
+# Execute
+docker-compose up -d
 ```
 
-## 🌐 Interface Web
+## ⚙️ Configuração
 
-Acesse: `http://localhost:8080`
+### Variáveis de Ambiente
 
-### Funcionalidades da Interface:
-- 📊 **Dashboard em tempo real**
-- 💰 **Saldo Real vs Simulado** (toggle)
-- 📈 **Gráfico de performance**
-- 📋 **Histórico de trades**
-- 🎯 **Win rate e estatísticas**
-
-## 🔌 API REST - Endpoints
-
-### Base URL: `http://localhost:8080`
-
-### 1. **GET /balance** - Saldo Atual
-```bash
-curl http://localhost:8080/balance
-```
-**Resposta:**
-```json
-{
-  "saldo": 10870.65,
-  "conta": "PRACTICE",
-  "moeda": "USD"
-}
-```
-
-### 2. **GET /balance/{tipo}** - Saldo por Tipo de Conta
-```bash
-# Conta Real
-curl http://localhost:8080/balance/real
-
-# Conta Simulada
-curl http://localhost:8080/balance/practice
-```
-
-### 3. **GET /candles/{ativo}** - Dados de Candles
-```bash
-curl http://localhost:8080/candles/EURUSD
-```
-**Parâmetros opcionais:**
-- `timeframe`: 1, 5, 15, 30, 60 (minutos)
-- `count`: número de candles (padrão: 100)
-
-**Exemplo:**
-```bash
-curl "http://localhost:8080/candles/EURUSD?timeframe=5&count=50"
-```
-
-### 4. **GET /history** - Histórico de Trades
-```bash
-curl http://localhost:8080/history
-```
-**Resposta:**
-```json
-{
-  "trades": [
-    {
-      "id": 1,
-      "ativo": "EURUSD",
-      "acao": "CALL",
-      "valor": 10.0,
-      "resultado": "WIN",
-      "lucro": 8.0,
-      "data": "2025-07-19 10:30:00"
-    }
-  ],
-  "total_trades": 50,
-  "wins": 35,
-  "win_rate": 70.0
-}
-```
-
-### 5. **GET /management** - Status do Gerenciamento
-```bash
-curl http://localhost:8080/management
-```
-**Resposta:**
-```json
-{
-  "ativo": true,
-  "nivel_atual": 3,
-  "wins_consecutivos": 2,
-  "entrada_atual": 10.0,
-  "proxima_entrada": 15.0,
-  "estrategia": "Torre MK"
-}
-```
-
-### 6. **POST /management/start** - Iniciar Gerenciamento
-```bash
-curl -X POST http://localhost:8080/management/start
-```
-
-### 7. **POST /management/stop** - Parar Gerenciamento
-```bash
-curl -X POST http://localhost:8080/management/stop
-```
-
-### 8. **POST /management/reset** - Resetar Gerenciamento
-```bash
-curl -X POST http://localhost:8080/management/reset
-```
-
-### 9. **POST /trade** - Executar Trade Manual
-```bash
-curl -X POST http://localhost:8080/trade \
-  -H "Content-Type: application/json" \
-  -d '{
-    "ativo": "EURUSD",
-    "acao": "CALL",
-    "valor": 10.0,
-    "duracao": 5
-  }'
-```
-
-### 10. **GET /performance** - Dados de Performance
-```bash
-curl http://localhost:8080/performance
-```
-**Resposta:**
-```json
-{
-  "saldo_inicial": 10000.0,
-  "saldo_atual": 10870.65,
-  "lucro_total": 870.65,
-  "percentual_lucro": 8.7,
-  "total_trades": 50,
-  "wins": 35,
-  "losses": 15,
-  "win_rate": 70.0,
-  "maior_sequencia_wins": 8,
-  "maior_sequencia_losses": 3
-}
-```
-
-### 11. **GET /status** - Status Geral do Sistema
-```bash
-curl http://localhost:8080/status
-```
-**Resposta:**
-```json
-{
-  "status": "online",
-  "conexao_iq": true,
-  "conexao_db": true,
-  "gerenciamento_ativo": false,
-  "ultima_atualizacao": "2025-07-19 10:30:00",
-  "versao": "3.6"
-}
-```
-
-## 🔧 Configuração
-
-### Variáveis de Ambiente (.env)
 ```env
-# Credenciais IQ Option
+# IQ Option Credentials
 IQ_EMAIL=seu_email@exemplo.com
 IQ_PASSWORD=sua_senha
 
-# Banco de Dados
-DATABASE_URL=postgres://user:pass@host:port/db
+# Database
+DATABASE_URL=postgres://user:password@host:5432/database?sslmode=disable
 
-# Configurações do Gerenciamento
+# Trading Configuration
 ENTRY_PERCENTAGE=5.0
 WINS_TO_LEVEL_UP=5
 LOSS_COMPENSATION=1
-
-# Servidor
-FLASK_DEBUG=false
 ```
 
-## 📊 Estratégia Torre MK
+### Configurações de Trading
 
-O sistema implementa a estratégia "Torre MK":
+| Parâmetro | Descrição | Padrão |
+|-----------|-----------|--------|
+| `ENTRY_PERCENTAGE` | % da banca por entrada | 5.0% |
+| `WINS_TO_LEVEL_UP` | Wins para subir nível | 5 |
+| `LOSS_COMPENSATION` | Compensação de perdas | 1 |
 
-- **Progressão**: Aumenta entrada após wins consecutivos
-- **Proteção**: Reseta após loss
-- **Configurável**: Percentual de entrada e wins para subir nível
+## 🚀 Execução
 
-## 🛠️ Comandos Úteis
-
-### Verificar Status
 ```bash
-# Testar conexão IQ Option
+# Inicie o servidor
+python main.py
+
+# Ou com Docker
+docker-compose up -d
+```
+
+O servidor estará disponível em: `http://localhost:8080`
+
+## 📡 API Endpoints
+
+### 🔍 Status da API
+```http
+GET /
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "mensagem": "Bot Trader API funcionando",
+  "endpoints": {
+    "trade": "/trade",
+    "balance": "/balance",
+    "history": "/history",
+    "management": "/management",
+    "status": "/status"
+  }
+}
+```
+
+### 💰 Consultar Saldo
+```http
+GET /balance?tipo_conta=PRACTICE
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "saldo": 10870.65,
+  "conta": "PRACTICE",
+  "mensagem": "Saldo atual na conta PRACTICE: $10870.65"
+}
+```
+
+### 📊 Histórico de Trades
+```http
+GET /history?tipo_conta=PRACTICE
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "historico": [
+    {
+      "id": 1,
+      "ativo": "EURUSD-OTC",
+      "acao": "call",
+      "valor_investido": 50.0,
+      "resultado": "win",
+      "lucro": 45.0,
+      "data": "2025-07-19T10:30:00"
+    }
+  ]
+}
+```
+
+### 🎯 Executar Trade
+```http
+POST /trade
+Content-Type: application/json
+
+{
+  "ativo": "EURUSD-OTC",
+  "acao": "call",
+  "duracao": 5,
+  "tipo_conta": "PRACTICE",
+  "valor_entrada": 1
+}
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "mensagem": "Trade executado com sucesso!",
+  "trade_info": {
+    "ativo": "EURUSD-OTC",
+    "acao": "call",
+    "duracao": 5,
+    "tipo_conta": "PRACTICE",
+    "valor_investido": 50.0,
+    "saldo_anterior": 10870.65,
+    "order_id": "12345"
+  },
+  "saldo_atual": 10870.65,
+  "conta": "PRACTICE"
+}
+```
+
+### ⚙️ Gerenciamento
+```http
+GET /management?tipo_conta=PRACTICE
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "estado": {
+    "nivel_atual": 1,
+    "wins_consecutivos": 3,
+    "proxima_entrada": 75.0,
+    "banca_atual": 10870.65
+  }
+}
+```
+
+### 🔄 Resetar Histórico
+```http
+POST /management/reset
+Content-Type: application/json
+
+{
+  "tipo_conta": "PRACTICE"
+}
+```
+
+### 📈 Status Geral
+```http
+GET /status
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "mensagem": "pong"
+}
+```
+
+## 🐳 Deploy com Docker
+
+### Dockerfile
+```dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+EXPOSE 8080
+
+CMD ["python", "main.py"]
+```
+
+### Docker Compose
+```yaml
+version: '3.8'
+services:
+  bot-trader:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://user:pass@db:5432/trader
+    depends_on:
+      - db
+  
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: trader
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+## 🔧 Troubleshooting
+
+### Problemas Comuns
+
+#### 1. Erro de Conexão IQ Option
+```
+ERRO CRÍTICO: IQOptionAPI.__init__() missing 1 required positional argument: 'password'
+```
+**Solução:** Verifique as credenciais no arquivo `.env`
+
+#### 2. Erro de Banco de Dados
+```
+could not translate host name "chatwoot_teste" to address
+```
+**Solução:** Configure corretamente a `DATABASE_URL`
+
+#### 3. Bad Gateway no Deploy
+```
+Bad gateway - the service failed to handle your request
+```
+**Solução:** 
+- Verifique se o serviço está rodando
+- Confirme as variáveis de ambiente
+- Verifique os logs do container
+
+### Logs Úteis
+
+```bash
+# Ver logs do container
+docker-compose logs -f bot-trader
+
+# Testar conexão local
 curl http://localhost:8080/status
 
-# Verificar saldo
-curl http://localhost:8080/balance
-
-# Ver performance
-curl http://localhost:8080/performance
-```
-
-### Gerenciamento
-```bash
-# Iniciar sistema
-curl -X POST http://localhost:8080/management/start
-
-# Parar sistema
-curl -X POST http://localhost:8080/management/stop
-
-# Resetar
-curl -X POST http://localhost:8080/management/reset
-```
-
-### Trades
-```bash
-# Trade manual CALL
+# Testar trade local
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
-  -d '{"ativo":"EURUSD","acao":"CALL","valor":10.0,"duracao":5}'
-
-# Trade manual PUT
-curl -X POST http://localhost:8080/trade \
-  -H "Content-Type: application/json" \
-  -d '{"ativo":"EURUSD","acao":"PUT","valor":10.0,"duracao":5}'
+  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":1}'
 ```
 
-## 📱 Interface Web
+## 📊 Monitoramento
 
-Acesse `http://localhost:8080` para:
+### Logs Importantes
+- `INFO - Conectando à IQ Option...` - Início da conexão
+- `INFO - Conexão com IQ Option bem-sucedida.` - Conexão OK
+- `INFO - Saldo inicial (PRACTICE): $10870.65` - Saldo carregado
+- `INFO - Trade executado com sucesso!` - Trade realizado
 
-- **Dashboard em tempo real**
-- **Gráficos de performance**
-- **Histórico de trades**
-- **Controle de contas (Real/Simulado)**
-- **Configurações do sistema**
+### Métricas
+- **Saldo Atual** - Consulta via `/balance`
+- **Histórico** - Consulta via `/history`
+- **Performance** - Win rate calculado automaticamente
+- **Gerenciamento** - Status via `/management`
 
-## 🔍 Logs
+## 🤝 Contribuição
 
-O sistema gera logs detalhados:
-- Conexão IQ Option
-- Execução de trades
-- Mudanças de saldo
-- Erros e exceções
+1. Fork o projeto
+2. Crie uma branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
 
-## 🚨 Troubleshooting
+## 📄 Licença
 
-### Problemas Comuns:
-
-1. **Erro de conexão IQ Option**
-   - Verifique credenciais no .env
-   - Teste login manual no site
-
-2. **Erro de banco de dados**
-   - Verifique DATABASE_URL
-   - Use SQLite para testes locais
-
-3. **Porta ocupada**
-   - Mude a porta no main.py
-   - Ou mate o processo na porta 8080
+Este projeto é privado e não possui licença pública.
 
 ## 📞 Suporte
 
-Para dúvidas ou problemas:
+Para suporte técnico ou dúvidas:
 - Verifique os logs do sistema
-- Teste os endpoints individualmente
-- Confirme configurações no .env
+- Teste os endpoints localmente
+- Confirme as configurações de ambiente
 
 ---
 
-**Versão:** 3.6  
-**Última atualização:** 2025-07-19  
-**Status:** ✅ Funcionando 
+**⚠️ Aviso:** Trading envolve riscos. Use apenas com dinheiro que pode perder.
+
+**🔒 Segurança:** Nunca compartilhe suas credenciais IQ Option. 
