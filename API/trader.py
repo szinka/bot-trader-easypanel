@@ -77,12 +77,18 @@ class Trader:
         try:
             logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
             
+            # Verifica se a conexão está ativa
+            if not self.api.check_connect():
+                logging.error("Conexão perdida com IQ Option")
+                return False, None
+            
             # Versão 6.8.9: buy(amount, asset, action, duration)
             if acao.lower() == "call":
                 check, order_id = self.api.buy(valor, ativo, "call", duracao)
             else:
                 check, order_id = self.api.buy(valor, ativo, "put", duracao)
                 
+            logging.info(f"Resultado da compra: {check}, Order ID: {order_id}")
             return check, order_id
         except Exception as e:
             logging.error(f"Erro na compra: {e}")
