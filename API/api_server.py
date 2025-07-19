@@ -94,8 +94,8 @@ def rota_de_trade():
         sinal = request.get_json()
         
         # Validações básicas
-        if not sinal or 'ativo' not in sinal or 'acao' not in sinal or 'duracao' not in sinal:
-            return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao, duracao"}), 400
+        if not sinal or 'ativo' not in sinal or ('acao' not in sinal and 'call' not in sinal and 'put' not in sinal) or 'duracao' not in sinal:
+            return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
         valor_entrada_req = sinal.get('valor_entrada', 'gen')
@@ -127,9 +127,18 @@ def rota_de_trade():
         else:
             return jsonify({"status": "erro", "mensagem": "Valor de entrada inválido."}), 400
 
+        # Determina a ação (call/put)
+        acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
+        if acao == 'call':
+            acao = 'call'
+        elif acao == 'put':
+            acao = 'put'
+        else:
+            return jsonify({"status": "erro", "mensagem": "Ação deve ser 'call' ou 'put'"}), 400
+        
         # Executa a ordem
         check, order_id = trader.comprar_ativo(
-            sinal['ativo'], valor_investido, sinal['acao'], int(sinal['duracao'])
+            sinal['ativo'], valor_investido, acao, int(sinal['duracao'])
         )
         
         if not check:
@@ -141,7 +150,7 @@ def rota_de_trade():
             "mensagem": "Trade executado com sucesso!",
             "trade_info": {
                 "ativo": sinal['ativo'],
-                "acao": sinal['acao'],
+                "acao": acao,
                 "duracao": sinal['duracao'],
                 "tipo_conta": tipo_conta,
                 "valor_investido": valor_investido,
