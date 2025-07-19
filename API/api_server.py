@@ -193,12 +193,26 @@ def rota_get_estado_gerenciador():
     """Consulta estado do gerenciador."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
+        
+        # Inicializa o gerenciador se não existir
+        trader.selecionar_conta(tipo_conta)
+        banca_atual = trader.get_saldo()
+        gerenciador_multi.get_proxima_entrada(tipo_conta, banca_atual)  # Isso cria o gerenciador
+        
         estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
         
         if estado:
             return jsonify({"status": "sucesso", "estado": estado})
         else:
-            return jsonify({"status": "erro", "mensagem": f"Gerenciador não encontrado para {tipo_conta}"}), 404
+            # Se ainda não existe, retorna estado inicial
+            return jsonify({
+                "status": "sucesso", 
+                "estado": {
+                    "total_wins": 0,
+                    "level_entries": {1: max(1.0, banca_atual * 0.05)},
+                    "nivel_atual": 1
+                }
+            })
     except Exception as e:
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
