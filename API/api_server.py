@@ -49,6 +49,7 @@ except Exception as e:
 
 # --- Endpoints Essenciais ---
 @app.route('/get_saldo', methods=['GET'])
+@app.route('/balance', methods=['GET'])
 def rota_get_saldo():
     """Consulta saldo da conta."""
     try:
@@ -165,6 +166,7 @@ def rota_de_trade():
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 @app.route('/get_historico_trades', methods=['GET'])
+@app.route('/history', methods=['GET'])
 def rota_get_historico():
     """Busca histórico de trades."""
     try:
@@ -185,6 +187,7 @@ def rota_get_historico():
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 @app.route('/get_estado_gerenciador', methods=['GET'])
+@app.route('/management', methods=['GET'])
 def rota_get_estado_gerenciador():
     """Consulta estado do gerenciador."""
     try:
@@ -199,6 +202,7 @@ def rota_get_estado_gerenciador():
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 @app.route('/resetar_historico', methods=['POST'])
+@app.route('/management/reset', methods=['POST'])
 def rota_resetar_historico():
     """Reseta histórico de trades."""
     try:
@@ -230,6 +234,7 @@ def rota_resetar_historico():
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 @app.route('/ping', methods=['GET'])
+@app.route('/status', methods=['GET'])
 def rota_de_ping():
     """Teste de conectividade."""
     return jsonify({
