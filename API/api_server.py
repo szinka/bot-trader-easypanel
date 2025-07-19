@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Importa os módulos essenciais
-from trader import Trader
-from gerenciamento import GerenciadorMultiConta
-import database
+from API.trader import Trader
+from API.gerenciamento import GerenciadorMultiConta
+import API.database as database
 
 # Configuração básica de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
