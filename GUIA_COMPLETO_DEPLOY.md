@@ -176,3 +176,86 @@ Se algo não funcionar, verifique:
 3. **Conexão** com IQ Option e banco de dados
 
 **O sistema está 100% testado e funcional!** 🚀 
+
+## 🔄 **ANTES (sistema antigo):**
+```json
+{
+  "method": "POST",
+  "url": "https://chatwoot-bot.vi7m8l.easypanel.host/trade",
+  "sendBody": true,
+  "specifyBody": "json",
+  "jsonBody": "={\n  \"ativo\": \"EURUSD-OTC\",\n  \"acao\": \"{{ $json.message.content }}\",\n  \"duracao\": 5,\n  \"tipo_conta\": \"PRACTICE\",\n  \"valor_entrada\": 1\n}",
+  "options": {}
+}
+```
+
+## ✅ **AGORA (sistema novo):**
+
+### **1. Trade Manual (Limitado a 5% da banca):**
+```json
+{
+  "method": "POST",
+  "url": "https://seu-dominio.vi7m8l.easypanel.host/trade",
+  "sendBody": true,
+  "specifyBody": "json",
+  "jsonBody": "={\n  \"ativo\": \"EURUSD-OTC\",\n  \"acao\": \"{{ $json.message.content }}\",\n  \"duracao\": 5,\n  \"tipo_conta\": \"PRACTICE\",\n  \"valor_entrada\": 10\n}",
+  "options": {}
+}
+```
+
+### **2. Trade Automático (Usa 5% da banca):**
+```json
+<code_block_to_apply_changes_from>
+```
+
+## 🎯 **Principais mudanças:**
+
+### **1. URL:**
+- **Antes**: `https://chatwoot-bot.vi7m8l.easypanel.host/trade`
+- **Agora**: `https://seu-dominio.vi7m8l.easypanel.host/trade`
+- **Substitua**: `seu-dominio` pelo domínio do seu novo projeto
+
+### **2. valor_entrada:**
+- **Antes**: `"valor_entrada": 1` (valor fixo)
+- **Agora Manual**: `"valor_entrada": 10` (limitado a 5% da banca)
+- **Agora Automático**: `"valor_entrada": "gen"` (usa 5% da banca)
+
+### **3. Validações:**
+- ✅ **Manual**: Máximo 5% da banca
+- ✅ **Automático**: Usa gerenciamento Torre MK
+- ✅ **Multi-conta**: REAL/PRACTICE isoladas
+
+## 💰 **Exemplos práticos:**
+
+### **Trade Manual (EURUSD-OTC, 5 min):**
+```json
+{
+  "ativo": "EURUSD-OTC",
+  "acao": "call",
+  "duracao": 5,
+  "tipo_conta": "PRACTICE",
+  "valor_entrada": 50
+}
+```
+
+### **Trade Automático (EURUSD-OTC, 5 min):**
+```json
+{
+  "ativo": "EURUSD-OTC",
+  "acao": "call",
+  "duracao": 5,
+  "tipo_conta": "PRACTICE",
+  "valor_entrada": "gen"
+}
+```
+
+## 🔧 **Para configurar no n8n:**
+
+1. **Mude a URL** para seu novo domínio
+2. **Escolha o tipo**:
+   - **Manual**: `"valor_entrada": 10` (ou valor desejado)
+   - **Automático**: `"valor_entrada": "gen"`
+3. **Mantenha** `"acao": "{{ $json.message.content }}"` para usar a mensagem
+4. **Teste** primeiro com PRACTICE
+
+**Agora seu n8n vai funcionar perfeitamente com o novo sistema!** 🚀 

@@ -9,8 +9,8 @@ class GerenciamentoTorreMK:
         self.total_wins = 0
         self.level_entries = {}
         
-        # Porcentagem do gerenciamento (padrão 10%, mas pode ser configurada via env)
-        self.gerenciamento_percent = float(os.getenv('GERENCIAMENTO_PERCENT', 10.0))
+        # Porcentagem do gerenciamento (padrão 5%, mas pode ser configurada via env)
+        self.gerenciamento_percent = float(os.getenv('GERENCIAMENTO_PERCENT', 5.0))
 
         entry_lvl_1 = round(banca_inicial * (self.gerenciamento_percent / 100), 2)
         self.level_entries[1] = max(1.0, entry_lvl_1)

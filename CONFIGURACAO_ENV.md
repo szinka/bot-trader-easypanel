@@ -26,9 +26,9 @@ API_PORT=8080
 ## 🎯 **Principais Mudanças:**
 
 ### **GERENCIAMENTO_PERCENT=5.0**
-- ✅ **Antes**: Gerenciamento usava 10% da banca
-- ✅ **Agora**: Gerenciamento usa 5% da banca (configurável)
-- ✅ **Pode mudar**: Basta alterar o valor no .env
+- ✅ **Padrão**: Gerenciamento usa 5% da banca
+- ✅ **Configurável**: Pode alterar via variável de ambiente
+- ✅ **Consistente**: Mesmo padrão do ENTRY_PERCENTAGE
 
 ### **ENTRY_PERCENTAGE=5.0**
 - ✅ **Entrada manual**: Limitada a 5% da banca

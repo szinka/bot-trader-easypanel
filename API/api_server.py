@@ -1,5 +1,5 @@
 # API/api_server.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import logging
 import os
 import time
@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Importa os módulos essenciais
-from .trader import Trader
-from .gerenciamento import GerenciadorMultiConta
-from . import database
+from trader import Trader
+from gerenciamento import GerenciadorMultiConta
+import database
 
 # Configuração básica de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,7 +33,7 @@ try:
     # Log das configurações carregadas
     logging.info(f"Configurações carregadas:")
     logging.info(f"  - ENTRY_PERCENTAGE: {os.getenv('ENTRY_PERCENTAGE', 5.0)}%")
-    logging.info(f"  - GERENCIAMENTO_PERCENT: {os.getenv('GERENCIAMENTO_PERCENT', 10.0)}%")
+    logging.info(f"  - GERENCIAMENTO_PERCENT: {os.getenv('GERENCIAMENTO_PERCENT', 5.0)}%")
     logging.info(f"  - WINS_TO_LEVEL_UP: {os.getenv('WINS_TO_LEVEL_UP', 5)}")
     logging.info(f"  - LOSS_COMPENSATION: {os.getenv('LOSS_COMPENSATION', 1)}")
     
@@ -59,7 +59,8 @@ def rota_get_saldo():
         return jsonify({
             "status": "sucesso", 
             "saldo": saldo, 
-            "conta": tipo_conta.upper()
+            "conta": tipo_conta.upper(),
+            "mensagem": f"Saldo atual na conta {tipo_conta.upper()}: ${saldo}"
         })
     except Exception as e:
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
@@ -103,15 +104,22 @@ def rota_de_trade():
         trader.selecionar_conta(tipo_conta)
         saldo_anterior = trader.get_saldo()
         
+        # Validação de saldo
+        if saldo_anterior <= 0:
+            return jsonify({
+                "status": "erro", 
+                "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: ${saldo_anterior}"
+            }), 400
+        
         # Define valor do investimento
         if isinstance(valor_entrada_req, (int, float)):
             valor_investido = float(valor_entrada_req)
             
-            # Validação de 10% da banca para valores manuais
-            if valor_investido > saldo_anterior * 0.10:
+            # Validação de 5% da banca para valores manuais
+            if valor_investido > saldo_anterior * 0.05:
                 return jsonify({
                     "status": "erro", 
-                    "mensagem": f"Valor de entrada ({valor_investido}) excede 10% da banca ({saldo_anterior * 0.10:.2f})"
+                    "mensagem": f"Valor de entrada ({valor_investido}) excede 5% da banca ({saldo_anterior * 0.05:.2f})"
                 }), 400
                 
         elif valor_entrada_req == 'gen':
@@ -127,33 +135,21 @@ def rota_de_trade():
         if not check:
             return jsonify({"status": "erro", "mensagem": "Ordem rejeitada em Binária e Digital"}), 500
 
-        # Aguarda resultado
-        time.sleep(int(sinal['duracao']) * 60 + 5) 
-        
-        saldo_posterior = trader.get_saldo()
-        diferenca = round(saldo_posterior - saldo_anterior, 2)
-        resultado = "WIN" if diferenca > 0 else "LOSS"
-        
-        # Processa resultado se gerenciado
-        if valor_entrada_req == 'gen':
-            gerenciador_multi.processar_resultado(tipo_conta, resultado, saldo_posterior)
-
-        # Salva trade
-        trade_info = {
-            'tipo_conta': tipo_conta,
-            'ativo': sinal['ativo'], 
-            'acao': sinal['acao'], 
-            'resultado': resultado, 
-            'lucro': diferenca, 
-            'valor_investido': valor_investido, 
-            'saldo_final': saldo_posterior
-        }
-        database.salvar_trade(db_conn, trade_info)
-
+        # Retorna resposta instantânea com informações do trade
         return jsonify({
-            "status": "sucesso", 
-            "resultado": resultado, 
-            "lucro": diferenca
+            "status": "sucesso",
+            "mensagem": "Trade executado com sucesso!",
+            "trade_info": {
+                "ativo": sinal['ativo'],
+                "acao": sinal['acao'],
+                "duracao": sinal['duracao'],
+                "tipo_conta": tipo_conta,
+                "valor_investido": valor_investido,
+                "saldo_anterior": saldo_anterior,
+                "order_id": order_id
+            },
+            "saldo_atual": saldo_anterior,
+            "conta": tipo_conta.upper()
         })
     except Exception as e:
         logging.error(f"Erro na rota /trade: {e}", exc_info=True)
@@ -231,6 +227,41 @@ def rota_de_ping():
         "status": "sucesso", 
         "mensagem": "pong"
     })
+
+@app.route('/get_saldos', methods=['GET'])
+def rota_get_saldos():
+    """Consulta saldo de ambas as contas."""
+    try:
+        # Saldo PRACTICE
+        trader.selecionar_conta('PRACTICE')
+        saldo_practice = trader.get_saldo()
+        
+        # Saldo REAL
+        trader.selecionar_conta('REAL')
+        saldo_real = trader.get_saldo()
+        
+        return jsonify({
+            "status": "sucesso",
+            "saldos": {
+                "PRACTICE": {
+                    "saldo": saldo_practice,
+                    "disponivel": saldo_practice > 0
+                },
+                "REAL": {
+                    "saldo": saldo_real,
+                    "disponivel": saldo_real > 0
+                }
+            },
+            "mensagem": f"PRACTICE: ${saldo_practice} | REAL: ${saldo_real}"
+        })
+    except Exception as e:
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
+# --- Interface HTML ---
+@app.route('/', methods=['GET'])
+def interface_principal():
+    """Interface principal de gerenciamento."""
+    return render_template('interface.html')
 
 # Importação para Decimal
 import decimal
