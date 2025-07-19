@@ -1,5 +1,5 @@
 # API/api_server.py
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import logging
 import os
 import time
@@ -274,11 +274,21 @@ def rota_get_saldos():
 # Importação para Decimal
 import decimal
 
-# --- Interface HTML ---
+# --- API Status ---
 @app.route('/', methods=['GET'])
-def interface_principal():
-    """Interface principal de gerenciamento."""
-    return render_template('interface.html')
+def api_status():
+    """Status da API."""
+    return jsonify({
+        "status": "sucesso",
+        "mensagem": "Bot Trader API funcionando",
+        "endpoints": {
+            "trade": "/trade",
+            "balance": "/balance", 
+            "history": "/history",
+            "management": "/management",
+            "status": "/status"
+        }
+    })
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8080, debug=False)
