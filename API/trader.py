@@ -21,15 +21,21 @@ class Trader:
     
     def conectar_iq_option(self, email, senha):
         logging.info("Conectando à IQ Option...")
-        self.api = IQ_Option(email, senha)
-        
-        if self.api.connect():
-            logging.info("Conexão com IQ Option bem-sucedida.")
-            self.api.change_balance("PRACTICE")  # Começa com PRACTICE
-            saldo = self.api.get_balance()
-            logging.info(f"Saldo inicial (PRACTICE): ${saldo}")
-        else:
-            logging.critical("Falha na conexão com IQ Option!")
+        try:
+            self.api = IQ_Option(email, senha)
+            
+            # Conecta à API
+            check, reason = self.api.connect()
+            if check:
+                logging.info("Conexão com IQ Option bem-sucedida.")
+                # Muda para conta de prática
+                self.api.change_balance("PRACTICE")
+                saldo = self.api.get_balance()
+                logging.info(f"Saldo inicial (PRACTICE): ${saldo}")
+            else:
+                logging.critical(f"Falha na conexão com IQ Option: {reason}")
+        except Exception as e:
+            logging.critical(f"ERRO CRÍTICO DURANTE A INICIALIZAÇÃO: {e}")
     
     def selecionar_conta(self, tipo_conta):
         if not self.api:
