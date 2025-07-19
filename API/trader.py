@@ -20,25 +20,32 @@ class Trader:
         self.conectar_iq_option(email, senha)
     
     def conectar_iq_option(self, email, senha):
-        logging.info("Conectando à IQ Option...")
+        logging.info(f"Conectando à IQ Option com email: {email}")
         try:
             # Versão 0.5 do iqoptionapi - tenta diferentes assinaturas
             try:
                 # Método 1: email, password
+                logging.info("Tentando método 1: email, password")
                 self.api = IQ_Option(email, password=senha)
-            except:
+            except Exception as e1:
+                logging.warning(f"Método 1 falhou: {e1}")
                 try:
                     # Método 2: email, senha
+                    logging.info("Tentando método 2: email, senha")
                     self.api = IQ_Option(email, senha)
-                except:
+                except Exception as e2:
+                    logging.warning(f"Método 2 falhou: {e2}")
                     # Método 3: username, password
+                    logging.info("Tentando método 3: username, password")
                     self.api = IQ_Option(email, password=senha)
             
             # Conecta à API
+            logging.info("Tentando conectar à API...")
             check, reason = self.api.connect()
             if check:
                 logging.info("Conexão com IQ Option bem-sucedida.")
                 # Muda para conta de prática
+                logging.info("Mudando para conta PRACTICE...")
                 self.api.change_balance("PRACTICE")
                 saldo = self.api.get_balance()
                 logging.info(f"Saldo inicial (PRACTICE): ${saldo}")
