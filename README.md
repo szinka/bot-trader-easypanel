@@ -9,12 +9,12 @@
 
 ## 🚀 Visão Geral
 
-Bot Trader é uma API REST completa para execução automatizada de trades na IQ Option. O sistema inclui gerenciamento de risco, histórico de operações, múltiplas contas (Real/Practice) e interface de monitoramento.
+Bot Trader é uma API REST completa para execução automatizada de trades na IQ Option. O sistema inclui gerenciamento de risco Torre MK, histórico de operações, múltiplas contas (Real/Practice) e interface de monitoramento.
 
 ### ✨ Características
 
 - 🔐 **Autenticação IQ Option** - Conexão segura com a plataforma
-- 💰 **Gerenciamento de Risco** - Controle automático de entradas
+- 💰 **Gerenciamento Torre MK** - Controle automático de entradas
 - 📊 **Múltiplas Contas** - Suporte para conta Real e Practice
 - 🗄️ **Banco PostgreSQL** - Histórico completo de trades
 - 📈 **Monitoramento** - Logs detalhados e métricas
@@ -64,17 +64,18 @@ docker-compose up -d
 ### Variáveis de Ambiente
 
 ```env
-# IQ Option Credentials
+# IQ Option Credentials (OBRIGATÓRIO)
 IQ_EMAIL=seu_email@exemplo.com
 IQ_PASSWORD=sua_senha
 
-# Database
+# Database (OPCIONAL - usa SQLite se não configurado)
 DATABASE_URL=postgres://user:password@host:5432/database?sslmode=disable
 
 # Trading Configuration
-ENTRY_PERCENTAGE=5.0
-WINS_TO_LEVEL_UP=5
-LOSS_COMPENSATION=1
+ENTRY_PERCENTAGE=5.0          # % da banca por entrada
+GERENCIAMENTO_PERCENT=5.0     # % para gerenciamento
+WINS_TO_LEVEL_UP=5            # Wins para subir nível
+LOSS_COMPENSATION=1           # Compensação de perdas
 ```
 
 ### Configurações de Trading
@@ -82,6 +83,7 @@ LOSS_COMPENSATION=1
 | Parâmetro | Descrição | Padrão |
 |-----------|-----------|--------|
 | `ENTRY_PERCENTAGE` | % da banca por entrada | 5.0% |
+| `GERENCIAMENTO_PERCENT` | % para gerenciamento | 5.0% |
 | `WINS_TO_LEVEL_UP` | Wins para subir nível | 5 |
 | `LOSS_COMPENSATION` | Compensação de perdas | 1 |
 
@@ -121,14 +123,47 @@ GET /
 ### 💰 Consultar Saldo
 ```http
 GET /balance?tipo_conta=PRACTICE
+GET /balance?tipo_conta=REAL
 ```
 **Resposta:**
 ```json
 {
   "status": "sucesso",
-  "saldo": 10870.65,
+  "saldo": 10860.65,
   "conta": "PRACTICE",
-  "mensagem": "Saldo atual na conta PRACTICE: $10870.65"
+  "mensagem": "Saldo atual na conta PRACTICE: $10860.65"
+}
+```
+
+### 🎯 Executar Trade
+```http
+POST /trade
+Content-Type: application/json
+
+{
+  "ativo": "EURUSD-OTC",
+  "acao": "call",
+  "duracao": 5,
+  "tipo_conta": "PRACTICE",
+  "valor_entrada": 10
+}
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "mensagem": "Trade executado com sucesso!",
+  "trade_info": {
+    "ativo": "EURUSD-OTC",
+    "acao": "call",
+    "duracao": 5,
+    "tipo_conta": "PRACTICE",
+    "valor_investido": 10.0,
+    "saldo_anterior": 10870.65,
+    "order_id": "12866120951"
+  },
+  "saldo_atual": 10870.65,
+  "conta": "PRACTICE"
 }
 ```
 
@@ -145,44 +180,12 @@ GET /history?tipo_conta=PRACTICE
       "id": 1,
       "ativo": "EURUSD-OTC",
       "acao": "call",
-      "valor_investido": 50.0,
+      "valor_investido": 10.0,
       "resultado": "win",
-      "lucro": 45.0,
+      "lucro": 9.0,
       "data": "2025-07-19T10:30:00"
     }
   ]
-}
-```
-
-### 🎯 Executar Trade
-```http
-POST /trade
-Content-Type: application/json
-
-{
-  "ativo": "EURUSD-OTC",
-  "acao": "call",
-  "duracao": 5,
-  "tipo_conta": "PRACTICE",
-  "valor_entrada": 1
-}
-```
-**Resposta:**
-```json
-{
-  "status": "sucesso",
-  "mensagem": "Trade executado com sucesso!",
-  "trade_info": {
-    "ativo": "EURUSD-OTC",
-    "acao": "call",
-    "duracao": 5,
-    "tipo_conta": "PRACTICE",
-    "valor_investido": 50.0,
-    "saldo_anterior": 10870.65,
-    "order_id": "12345"
-  },
-  "saldo_atual": 10870.65,
-  "conta": "PRACTICE"
 }
 ```
 
@@ -195,10 +198,9 @@ GET /management?tipo_conta=PRACTICE
 {
   "status": "sucesso",
   "estado": {
-    "nivel_atual": 1,
-    "wins_consecutivos": 3,
-    "proxima_entrada": 75.0,
-    "banca_atual": 10870.65
+    "total_wins": 0,
+    "level_entries": {"1": 543.03},
+    "nivel_atual": 1
   }
 }
 ```
@@ -225,47 +227,83 @@ GET /status
 }
 ```
 
-## 🐳 Deploy com Docker
+## 🎯 Como Usar o Bot
 
-### Dockerfile
-```dockerfile
-FROM python:3.9-slim
+### 1. **Configuração Inicial**
+```bash
+# Configure suas credenciais
+IQ_EMAIL=seu_email@iqoption.com
+IQ_PASSWORD=sua_senha
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8080
-
-CMD ["python", "main.py"]
+# Inicie o servidor
+python main.py
 ```
 
-### Docker Compose
-```yaml
-version: '3.8'
-services:
-  bot-trader:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgres://user:pass@db:5432/trader
-    depends_on:
-      - db
-  
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: trader
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+### 2. **Teste de Conexão**
+```bash
+# Teste se está funcionando
+curl http://localhost:8080/status
 
-volumes:
-  postgres_data:
+# Verifique o saldo
+curl http://localhost:8080/balance?tipo_conta=PRACTICE
 ```
+
+### 3. **Executar Trade Manual**
+```bash
+curl -X POST http://localhost:8080/trade \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ativo": "EURUSD-OTC",
+    "acao": "call",
+    "duracao": 5,
+    "tipo_conta": "PRACTICE",
+    "valor_entrada": 10
+  }'
+```
+
+### 4. **Receber Sinais Automáticos**
+O bot está pronto para receber sinais via API. Envie POST para `/trade` com:
+- `ativo`: EURUSD-OTC, GBPUSD, etc.
+- `acao`: "call" ou "put"
+- `duracao`: 1, 5, 15 minutos
+- `tipo_conta`: "PRACTICE" ou "REAL"
+- `valor_entrada`: valor específico ou "gen" para gerenciamento automático
+
+## 💰 Gerenciamento de Risco
+
+### Torre MK
+- **Nível 1**: 5% da banca
+- **Subida de Nível**: A cada 5 wins consecutivos
+- **Compensação**: -1 win por loss, -2 wins se vai cair de nível
+
+### Exemplo de Progressão
+```
+Nível 1: $543.03 (5% de $10,860)
+Nível 2: $1,086.07 (10% de $10,860)
+Nível 3: $1,629.10 (15% de $10,860)
+```
+
+## 🐳 Deploy com EasyPanel
+
+### 1. **Configuração no EasyPanel**
+- **Repository**: `https://github.com/szinka/bot-trader-easypanel`
+- **Branch**: `main`
+- **Port**: `8080`
+
+### 2. **Variáveis de Ambiente**
+```env
+IQ_EMAIL=seu_email@iqoption.com
+IQ_PASSWORD=sua_senha
+DATABASE_URL=postgres://user:pass@host:5432/db
+ENTRY_PERCENTAGE=5.0
+WINS_TO_LEVEL_UP=5
+LOSS_COMPENSATION=1
+```
+
+### 3. **Deploy Automático**
+- EasyPanel detecta mudanças no GitHub
+- Build automático com Docker
+- Deploy em produção
 
 ## 🔧 Troubleshooting
 
@@ -283,7 +321,16 @@ could not translate host name "chatwoot_teste" to address
 ```
 **Solução:** Configure corretamente a `DATABASE_URL`
 
-#### 3. Bad Gateway no Deploy
+#### 3. Trade Rejeitado
+```
+"Ordem rejeitada em Binária e Digital"
+```
+**Solução:** 
+- Verifique se o ativo está aberto (EURUSD-OTC funciona)
+- Confirme se tem saldo suficiente
+- Use duração válida (1, 5, 15 minutos)
+
+#### 4. Bad Gateway no Deploy
 ```
 Bad gateway - the service failed to handle your request
 ```
@@ -304,7 +351,7 @@ curl http://localhost:8080/status
 # Testar trade local
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
-  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":1}'
+  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
 ```
 
 ## 📊 Monitoramento
@@ -312,7 +359,7 @@ curl -X POST http://localhost:8080/trade \
 ### Logs Importantes
 - `INFO - Conectando à IQ Option...` - Início da conexão
 - `INFO - Conexão com IQ Option bem-sucedida.` - Conexão OK
-- `INFO - Saldo inicial (PRACTICE): $10870.65` - Saldo carregado
+- `INFO - Saldo inicial (PRACTICE): $10860.65` - Saldo carregado
 - `INFO - Trade executado com sucesso!` - Trade realizado
 
 ### Métricas
@@ -321,27 +368,62 @@ curl -X POST http://localhost:8080/trade \
 - **Performance** - Win rate calculado automaticamente
 - **Gerenciamento** - Status via `/management`
 
-## 🤝 Contribuição
+## 🎯 Ativos Suportados
 
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+### Ativos Testados e Funcionais
+- **EURUSD-OTC** ✅ (Recomendado)
+- **GBPUSD-OTC** ✅
+- **EURUSD** ⚠️ (Pode ter restrições)
+- **GBPUSD** ⚠️ (Pode ter restrições)
 
-## 📄 Licença
+### Durações Suportadas
+- **1 minuto** ✅
+- **5 minutos** ✅
+- **15 minutos** ✅
 
-Este projeto é privado e não possui licença pública.
+## 🔒 Segurança
+
+### Boas Práticas
+- ✅ **Nunca compartilhe** suas credenciais IQ Option
+- ✅ **Use sempre HTTPS** em produção
+- ✅ **Configure firewall** adequadamente
+- ✅ **Monitore logs** regularmente
+- ✅ **Faça backup** do banco de dados
+
+### Variáveis Sensíveis
+```env
+# NUNCA commite estas variáveis
+IQ_EMAIL=seu_email@iqoption.com
+IQ_PASSWORD=sua_senha
+DATABASE_URL=postgres://user:pass@host:5432/db
+```
 
 ## 📞 Suporte
 
-Para suporte técnico ou dúvidas:
-- Verifique os logs do sistema
-- Teste os endpoints localmente
-- Confirme as configurações de ambiente
+### Verificação Rápida
+```bash
+# 1. Status da API
+curl http://localhost:8080/status
+
+# 2. Saldo da conta
+curl http://localhost:8080/balance?tipo_conta=PRACTICE
+
+# 3. Teste de trade
+curl -X POST http://localhost:8080/trade \
+  -H "Content-Type: application/json" \
+  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
+```
+
+### Problemas Comuns
+1. **Conexão IQ Option** - Verifique credenciais
+2. **Trade Rejeitado** - Use EURUSD-OTC, verifique saldo
+3. **Deploy Falhou** - Verifique Dockerfile e variáveis
+4. **Banco de Dados** - Configure DATABASE_URL
 
 ---
 
 **⚠️ Aviso:** Trading envolve riscos. Use apenas com dinheiro que pode perder.
 
-**🔒 Segurança:** Nunca compartilhe suas credenciais IQ Option. 
+**🔒 Segurança:** Nunca compartilhe suas credenciais IQ Option.
+
+**💰 Sucesso:** Sistema testado e funcionando com EURUSD-OTC! 
