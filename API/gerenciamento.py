@@ -75,7 +75,7 @@ class GerenciadorMultiConta:
             
             # Tenta carregar estado salvo do banco de dados
             if self.db_conn:
-                from . import database
+                import database
                 estado_salvo = database.carregar_estado(self.db_conn, tipo_conta)
                 if estado_salvo:
                     self.gerenciadores[tipo_conta].total_wins, self.gerenciadores[tipo_conta].level_entries = estado_salvo
@@ -101,7 +101,7 @@ class GerenciadorMultiConta:
         
         # Salva o estado no banco de dados
         if self.db_conn:
-            from . import database
+            import database
             database.salvar_estado(
                 self.db_conn, 
                 tipo_conta, 
@@ -131,7 +131,7 @@ class GerenciadorMultiConta:
         
         # Remove do banco de dados
         if self.db_conn:
-            from . import database
+            import database
             database.resetar_estado_gerenciamento(self.db_conn, tipo_conta)
         
         # Recria o gerenciador

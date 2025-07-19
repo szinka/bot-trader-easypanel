@@ -1,7 +1,17 @@
 #!/bin/bash
 # start.sh
 
-echo "Iniciando o servidor Gunicorn..."
-# Inicia o servidor Flask usando Gunicorn, que é apropriado para produção
-# Ele vai procurar pela variável 'app' dentro do arquivo 'api_server.py' na pasta 'API'
-gunicorn --bind 0.0.0.0:80 --workers 1 "API.api_server:app"
+echo "🚀 Iniciando Bot Trader..."
+echo "📊 Verificando configurações..."
+
+# Verifica se as variáveis de ambiente estão configuradas
+if [ -z "$IQ_EMAIL" ] || [ -z "$IQ_PASSWORD" ]; then
+    echo "❌ Erro: IQ_EMAIL e IQ_PASSWORD devem estar configurados!"
+    exit 1
+fi
+
+echo "✅ Configurações OK"
+echo "🌐 Iniciando servidor na porta 8080..."
+
+# Inicia o servidor Python
+python main.py

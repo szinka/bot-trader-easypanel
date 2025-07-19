@@ -26,4 +26,4 @@ RUN mkdir -p /app/logs
 EXPOSE 8080
 
 # Comando para iniciar a aplicação
-CMD ["python", "-m", "API.api_server"]
+CMD ["python", "main.py"]

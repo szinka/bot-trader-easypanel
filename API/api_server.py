@@ -257,14 +257,14 @@ def rota_get_saldos():
     except Exception as e:
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
+# Importação para Decimal
+import decimal
+
 # --- Interface HTML ---
 @app.route('/', methods=['GET'])
 def interface_principal():
     """Interface principal de gerenciamento."""
     return render_template('interface.html')
-
-# Importação para Decimal
-import decimal
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8080, debug=False)
