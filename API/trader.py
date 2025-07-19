@@ -1,47 +1,78 @@
 # API/trader.py
+import logging
 import os
 from iqoptionapi.stable_api import IQ_Option
-import logging
 import time
 
 class Trader:
     def __init__(self):
-        email = os.getenv("IQ_EMAIL")
-        password = os.getenv("IQ_PASSWORD")
-        if not email or not password:
-            raise ValueError("Credenciais IQ_EMAIL e IQ_PASSWORD não definidas nas variáveis de ambiente.")
+        self.api = None
+        self.conta_atual = None
         
+        # Carrega credenciais do EasyPanel
+        email = os.getenv('IQ_EMAIL')
+        senha = os.getenv('IQ_PASSWORD')
+        
+        if not email or not senha:
+            logging.critical("Credenciais IQ Option não configuradas no EasyPanel!")
+            return
+            
+        self.conectar_iq_option(email, senha)
+    
+    def conectar_iq_option(self, email, senha):
         logging.info("Conectando à IQ Option...")
-        self.api = IQ_Option(email, password)
-        self.api.connect()
-
-        if not self.api.check_connect():
-            raise ConnectionError("Falha na conexão com a IQ Option")
+        self.api = IQ_Option(email, senha)
         
-        # Define a conta de prática como padrão na inicialização
-        self.selecionar_conta("PRACTICE")
-        logging.info(f"Conexão com IQ Option bem-sucedida. Saldo inicial (PRACTICE): ${self.get_saldo()}")
-
+        if self.api.connect():
+            logging.info("Conexão com IQ Option bem-sucedida.")
+            self.api.change_balance("PRACTICE")  # Começa com PRACTICE
+            saldo = self.api.get_balance()
+            logging.info(f"Saldo inicial (PRACTICE): ${saldo}")
+        else:
+            logging.critical("Falha na conexão com IQ Option!")
+    
     def selecionar_conta(self, tipo_conta):
-        """Muda o tipo de conta para 'REAL' ou 'PRACTICE'."""
-        if tipo_conta.upper() not in ["REAL", "PRACTICE"]:
-            raise ValueError("Tipo de conta inválido. Use 'REAL' ou 'PRACTICE'.")
-        
-        self.api.change_balance(tipo_conta.upper())
-        logging.info(f"Conta alterada para: {tipo_conta.upper()}")
-
+        if not self.api:
+            return False
+            
+        if tipo_conta.upper() == "REAL":
+            self.api.change_balance("REAL")
+        else:
+            self.api.change_balance("PRACTICE")
+            
+        self.conta_atual = tipo_conta.upper()
+        logging.info(f"Conta alterada para: {self.conta_atual}")
+        return True
+    
     def get_saldo(self):
+        if not self.api:
+            return 0
         return self.api.get_balance()
-
+    
     def get_candles(self, ativo, timeframe, quantidade):
-        logging.info(f"Buscando {quantidade} velas de {ativo} (Timeframe: {timeframe}s)...")
-        return self.api.get_candles(ativo, int(timeframe), int(quantidade), time.time())
-
+        if not self.api:
+            return None
+            
+        try:
+            candles = self.api.get_candles(ativo, timeframe * 60, quantidade, time.time())
+            return candles
+        except Exception as e:
+            logging.error(f"Erro ao buscar candles: {e}")
+            return None
+    
     def comprar_ativo(self, ativo, valor, acao, duracao):
-        logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
-        check, order_id = self.api.buy(valor, ativo, acao, duracao)
-        if not check:
-            logging.warning("Compra como Binária falhou. Tentando como Digital...")
-            check, order_id = self.api.buy_digital_spot(ativo, valor, acao, duracao)
-        
-        return check, order_id
+        if not self.api:
+            return False, None
+            
+        try:
+            logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
+            
+            if acao.lower() == "call":
+                check, order_id = self.api.buy(valor, ativo, "call", duracao)
+            else:
+                check, order_id = self.api.buy(valor, ativo, "put", duracao)
+                
+            return check, order_id
+        except Exception as e:
+            logging.error(f"Erro na compra: {e}")
+            return False, None

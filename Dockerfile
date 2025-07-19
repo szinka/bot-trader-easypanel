@@ -1,27 +1,29 @@
 # Usa uma imagem base oficial do Python
 FROM python:3.11-slim
 
-# Define o diretório de trabalho dentro do container
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Define o diretório de trabalho
 WORKDIR /app
 
-# ---- ADIÇÃO IMPORTANTE ----
-# Atualiza os pacotes e instala o Git
-RUN apt-get update && apt-get install -y git
-
-# Copia o arquivo de dependências primeiro para aproveitar o cache do Docker
+# Copia os arquivos de dependências
 COPY requirements.txt .
 
-# Instala as dependências do Python
+# Instala as dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia todo o resto do projeto para o diretório de trabalho
+# Copia o código da aplicação
 COPY . .
 
-# Expõe a porta que o gunicorn vai usar
-EXPOSE 80
+# Cria diretório para logs
+RUN mkdir -p /app/logs
 
-# Dá permissão de execução ao script de start
-RUN chmod +x ./start.sh
+# Expõe a porta
+EXPOSE 8080
 
-# Comando para iniciar a aplicação quando o container for executado
-CMD ["./start.sh"]
+# Comando para iniciar a aplicação
+CMD ["python", "-m", "API.api_server"]

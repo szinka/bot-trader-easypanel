@@ -1,5 +1,5 @@
-Flask
-gunicorn
-psycopg2-binary
-python-dotenv
-iqoptionapi @ git+https://github.com/Lu-Yi-Hsun/iqoptionapi.git@e2a198fe74a3cd646604b11d293c383ef3d39330
+flask==2.3.3
+requests==2.31.0
+python-dotenv==1.0.0
+psycopg2-binary==2.9.7
+iqoptionapi==8.8.8

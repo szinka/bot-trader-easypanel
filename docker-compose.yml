@@ -2,18 +2,23 @@
 version: '3.8'
 
 services:
-  bot-trader-v2:
+  bot-trader:
     build: .
     restart: unless-stopped
     ports:
-      # Mapeia a porta externa 8080 para a porta interna 8080 do container
       - "8080:8080"
     environment:
-      # Aqui você pode definir as variáveis de ambiente para o Docker Compose
-      # Mas no EasyPanel, você as definirá na interface gráfica
       - IQ_EMAIL=${IQ_EMAIL}
       - IQ_PASSWORD=${IQ_PASSWORD}
       - DATABASE_URL=${DATABASE_URL}
-      - ENTRY_PERCENTAGE=${ENTRY_PERCENTAGE}
-      - WINS_TO_LEVEL_UP=${WINS_TO_LEVEL_UP}
-      - LOSS_COMPENSATION=${LOSS_COMPENSATION}
+      - DB_HOST=${DB_HOST:-easypanel.allkimy.academy}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-teste}
+      - DB_USER=${DB_USER:-teste}
+      - DB_PASSWORD=${DB_PASSWORD:-dbfafd3ad79f44b4da88}
+      - ENTRY_PERCENTAGE=${ENTRY_PERCENTAGE:-5.0}
+      - GERENCIAMENTO_PERCENT=${GERENCIAMENTO_PERCENT:-5.0}
+      - WINS_TO_LEVEL_UP=${WINS_TO_LEVEL_UP:-5}
+      - LOSS_COMPENSATION=${LOSS_COMPENSATION:-1}
+    volumes:
+      - ./logs:/app/logs
