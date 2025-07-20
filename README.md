@@ -123,10 +123,22 @@ GET /
 }
 ```
 
+### 👤 Consultar Perfil (Moeda da Conta)
+```http
+GET /profile?tipo_conta=PRACTICE
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "conta": "PRACTICE",
+  "moeda": "USD"
+}
+```
+
 ### 💰 Consultar Saldo
 ```http
 GET /balance?tipo_conta=PRACTICE
-GET /balance?tipo_conta=REAL
 ```
 **Resposta:**
 ```json
@@ -134,7 +146,8 @@ GET /balance?tipo_conta=REAL
   "status": "sucesso",
   "saldo": 10860.65,
   "conta": "PRACTICE",
-  "mensagem": "Saldo atual na conta PRACTICE: $10860.65"
+  "moeda": "USD",
+  "mensagem": "Saldo atual na conta PRACTICE: USD 10860.65"
 }
 ```
 

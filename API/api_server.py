@@ -49,20 +49,37 @@ except Exception as e:
     exit()
 
 # --- Endpoints Essenciais ---
-@app.route('/get_saldo', methods=['GET'])
+@app.route('/profile', methods=['GET'])
+def rota_get_profile():
+    """Retorna a moeda da conta selecionada."""
+    try:
+        tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
+        trader.selecionar_conta(tipo_conta)
+        moeda = trader.get_moeda_conta()
+        return jsonify({
+            "status": "sucesso",
+            "conta": tipo_conta.upper(),
+            "moeda": moeda
+        })
+    except Exception as e:
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
 @app.route('/balance', methods=['GET'])
 def rota_get_saldo():
     """Consulta saldo da conta."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
         trader.selecionar_conta(tipo_conta)
+        moeda = trader.get_moeda_conta()
         saldo = trader.get_saldo()
+        logging.info(f"Consulta de saldo para conta {tipo_conta} ({moeda})")
         
         return jsonify({
             "status": "sucesso", 
             "saldo": saldo, 
             "conta": tipo_conta.upper(),
-            "mensagem": f"Saldo atual na conta {tipo_conta.upper()}: ${saldo}"
+            "moeda": moeda,
+            "mensagem": f"Saldo atual na conta {tipo_conta.upper()}: {moeda} {saldo}"
         })
     except Exception as e:
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
@@ -104,13 +121,15 @@ def rota_de_trade():
 
         # Seleciona a conta
         trader.selecionar_conta(tipo_conta)
+        moeda = trader.get_moeda_conta()
         saldo_anterior = trader.get_saldo()
+        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior}")
         
         # Validação de saldo
         if saldo_anterior <= 0:
             return jsonify({
                 "status": "erro", 
-                "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: ${saldo_anterior}"
+                "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: {moeda} {saldo_anterior}"
             }), 400
         
         # Define valor do investimento
@@ -244,6 +263,44 @@ def rota_resetar_historico():
         logging.error(f"Erro ao resetar histórico: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
+@app.route('/resetar_gerenciamento', methods=['POST'])
+@app.route('/management/reset_gerenciamento', methods=['POST'])
+def rota_resetar_gerenciamento():
+    """Reseta apenas o gerenciamento, pegando 5% da banca atual."""
+    try:
+        dados = request.get_json() or {}
+        tipo_conta = dados.get('tipo_conta', 'PRACTICE')
+        
+        # Seleciona a conta e pega o saldo atual
+        trader.selecionar_conta(tipo_conta)
+        banca_atual = trader.get_saldo()
+        
+        # Calcula nova entrada baseada em 5% da banca atual
+        nova_entrada = round(banca_atual * 0.05, 2)
+        
+        # Reseta apenas o gerenciamento
+        database.resetar_estado_gerenciamento(db_conn, tipo_conta)
+        gerenciador_multi.resetar_gerenciador(tipo_conta, banca_atual)
+        
+        # Verifica se o reset foi aplicado corretamente
+        estado_apos_reset = gerenciador_multi.get_estado_gerenciador(tipo_conta)
+        
+        mensagem = f"Gerenciamento resetado para {tipo_conta}. Nova entrada: ${nova_entrada} (5% de ${banca_atual})"
+        
+        return jsonify({
+            "status": "sucesso", 
+            "mensagem": mensagem,
+            "dados": {
+                "tipo_conta": tipo_conta,
+                "banca_atual": banca_atual,
+                "nova_entrada": nova_entrada,
+                "estado_apos_reset": estado_apos_reset
+            }
+        })
+    except Exception as e:
+        logging.error(f"Erro ao resetar gerenciamento: {e}", exc_info=True)
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
 @app.route('/ping', methods=['GET'])
 @app.route('/status', methods=['GET'])
 def rota_de_ping():
@@ -294,6 +351,7 @@ def api_status():
             "balance": "/balance", 
             "history": "/history",
             "management": "/management",
+            "reset_management": "/resetar_gerenciamento",
             "status": "/status"
         }
     })

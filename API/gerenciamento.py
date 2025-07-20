@@ -9,10 +9,8 @@ class GerenciamentoTorreMK:
         self.total_wins = 0
         self.level_entries = {}
         
-        # Porcentagem do gerenciamento (padrão 5%, mas pode ser configurada via env)
-        self.gerenciamento_percent = float(os.getenv('GERENCIAMENTO_PERCENT', 5.0))
-
-        entry_lvl_1 = round(banca_inicial * (self.gerenciamento_percent / 100), 2)
+        # Entrada inicial baseada na banca inicial
+        entry_lvl_1 = round(banca_inicial * 0.05, 2)  # 5% da banca inicial
         self.level_entries[1] = max(1.0, entry_lvl_1)
 
     def _get_level_from_wins(self, wins):
@@ -24,31 +22,38 @@ class GerenciamentoTorreMK:
 
     def processar_resultado(self, resultado, banca_atual):
         nivel_antigo = self._get_level_from_wins(self.total_wins)
+        wins_no_nivel_atual = self.total_wins % self.config['wins_to_level_up']
 
         if resultado.lower() == 'win':
             self.total_wins += 1
-        else:
-            # Verifica se vai cair de nível
-            wins_apos_loss_normal = max(0, self.total_wins - self.config['loss_compensation'])
-            nivel_apos_loss_normal = self._get_level_from_wins(wins_apos_loss_normal)
+            nivel_novo = self._get_level_from_wins(self.total_wins)
             
-            # Se vai cair de nível, perde 2 wins ao invés de 1
-            if nivel_apos_loss_normal < nivel_antigo:
-                self.total_wins = max(0, self.total_wins - 2)
+            # Se subiu de nível, calcula nova entrada com 50% de aumento
+            if nivel_novo > nivel_antigo:
+                entrada_anterior = self.level_entries.get(nivel_antigo, 1.0)
+                nova_entrada = round(entrada_anterior * 1.5, 2)  # 50% de aumento
+                self.level_entries[nivel_novo] = nova_entrada
+                logging.info(f"Subiu para nível {nivel_novo}, nova entrada: ${nova_entrada}")
+        else:
+w            # Lógica de perda
+            if wins_no_nivel_atual == 0:
+                # Perdeu com 0 wins no nível atual, volta ao nível anterior -2 wins
+                nivel_anterior = max(1, nivel_antigo - 1)
+                wins_necessarios = (nivel_anterior - 1) * self.config['wins_to_level_up']
+                self.total_wins = max(0, wins_necessarios - 2)
+                logging.info(f"Perdeu com 0 wins no nível {nivel_antigo}, voltou para nível {nivel_anterior} -2 wins")
             else:
+                # Perda normal, perde 1 win
                 self.total_wins = max(0, self.total_wins - self.config['loss_compensation'])
         
         nivel_novo = self._get_level_from_wins(self.total_wins)
 
+        # Remove entradas de níveis superiores se caiu de nível
         if nivel_novo < nivel_antigo:
             niveis_a_remover = [lvl for lvl in self.level_entries if lvl > nivel_novo]
             for lvl in niveis_a_remover:
                 del self.level_entries[lvl]
-        
-        if nivel_novo not in self.level_entries:
-            percentual = self.gerenciamento_percent / 100
-            nova_entrada = round(banca_atual * percentual, 2)
-            self.level_entries[nivel_novo] = max(1.0, nova_entrada)
+            logging.info(f"Caiu para nível {nivel_novo}, removidas entradas dos níveis superiores")
 
 class GerenciadorMultiConta:
     """
