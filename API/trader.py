@@ -4,12 +4,18 @@ import os
 from iqoptionapi.stable_api import IQ_Option
 import time
 
+# Lock global para evitar múltiplos logins
+IQ_LOGIN_ATTEMPTED = False
+IQ_LOGIN_SUCCESS = False
+IQ_LOGIN_ERROR = None
+
 class Trader:
     """
     Classe responsável por toda a comunicação com a IQ Option.
     Garante seleção de conta, execução de trades, consulta de saldo e candles.
     """
     def __init__(self):
+        global IQ_LOGIN_ATTEMPTED, IQ_LOGIN_SUCCESS, IQ_LOGIN_ERROR
         self.api = None
         self.conta_atual = None
         email = os.getenv('IQ_EMAIL')
@@ -17,7 +23,22 @@ class Trader:
         if not email or not senha:
             logging.critical("Credenciais IQ Option não configuradas no EasyPanel!")
             return
-        self.conectar_iq_option(email, senha)
+        if IQ_LOGIN_ATTEMPTED:
+            if IQ_LOGIN_SUCCESS:
+                logging.info("Login na IQ Option já realizado por outro processo.")
+            else:
+                logging.critical(f"Login na IQ Option já falhou anteriormente: {IQ_LOGIN_ERROR}")
+            return
+        IQ_LOGIN_ATTEMPTED = True
+        try:
+            self.conectar_iq_option(email, senha)
+            IQ_LOGIN_SUCCESS = True
+        except Exception as e:
+            IQ_LOGIN_ERROR = str(e)
+            print("\n❌ Erro ao conectar na IQ Option:", IQ_LOGIN_ERROR)
+            print("Dica: Verifique se não há múltiplos processos rodando, se você não atingiu o limite de requisições, ou se as credenciais estão corretas. Aguarde alguns minutos e tente novamente.\n")
+            logging.critical(f"ERRO CRÍTICO DURANTE A INICIALIZAÇÃO: {IQ_LOGIN_ERROR}")
+            raise
 
     def conectar_iq_option(self, email, senha):
         logging.info(f"Conectando à IQ Option com email: {email}")
