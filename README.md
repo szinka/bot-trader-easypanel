@@ -358,14 +358,15 @@ O sistema agora implementa a lógica correta do gerenciamento Torre MK:
 - **5 wins consecutivos** para subir de nível
 - **Aumento de 50%** apenas no UP de nível (não a cada vitória)
 - **Isolamento completo** entre contas REAL e PRACTICE
+- **Mínimo de R$ 2,00** em todas as entradas (inclusive após reset)
 
 #### **📊 Exemplo de Progressão**
 ```
-Banca inicial: $60
-Nível 1: $6.00 (10% da banca)
-Nível 2: $9.00 (+50% sobre nível 1)
-Nível 3: $13.50 (+50% sobre nível 2)
-Nível 4: $20.25 (+50% sobre nível 3)
+Banca inicial: $10
+Nível 1: $2.00 (mínimo)
+Nível 2: $3.00 (+50% sobre nível 1)
+Nível 3: $4.50 (+50% sobre nível 2)
+Nível 4: $6.75 (+50% sobre nível 3)
 ```
 
 #### **🔄 Regras de Perda**
@@ -375,7 +376,8 @@ Nível 4: $20.25 (+50% sobre nível 3)
 
 #### **🛡️ Segurança**
 - ✅ **Contas isoladas**: REAL e PRACTICE completamente separadas
-- ✅ **Reset inteligente**: Endpoint calcula nova entrada como 5% da banca atual
+- ✅ **Reset inteligente**: Endpoint calcula nova entrada como 10% da banca atual (mínimo R$ 2,00)
+- ✅ **Mínimo garantido**: Todas as entradas respeitam mínimo de R$ 2,00
 - ✅ **Persistência**: Estados salvos no banco de dados
 - ✅ **Logs detalhados**: Monitoramento completo das operações
 
@@ -383,7 +385,7 @@ Nível 4: $20.25 (+50% sobre nível 3)
 
 #### **Reset do Gerenciamento**
 ```bash
-# Reset pegando 5% da banca atual
+# Reset pegando 10% da banca atual (mínimo R$ 2,00)
 curl -X POST http://localhost:8080/resetar_gerenciamento \
   -H "Content-Type: application/json" \
   -d '{"tipo_conta": "PRACTICE"}'
@@ -392,7 +394,7 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 #### **O que o reset faz:**
 1. **Seleciona a conta** especificada
 2. **Pega o saldo atual** da conta
-3. **Calcula nova entrada** como 5% da banca atual
+3. **Calcula nova entrada** como 10% da banca atual (mínimo R$ 2,00)
 4. **Reseta o gerenciamento**:
    - Zera total_wins
    - Remove entradas de níveis superiores
