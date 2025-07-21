@@ -51,14 +51,14 @@ if response.status_code == 200:
 ```json
 {
     "status": "sucesso",
-    "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $5.00 (5% de $100.00)",
+    "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $10.00 (10% de $100.00)",
     "dados": {
         "tipo_conta": "PRACTICE",
         "banca_atual": 100.0,
-        "nova_entrada": 5.0,
+        "nova_entrada": 10.0,
         "estado_apos_reset": {
             "total_wins": 0,
-            "level_entries": {1: 5.0},
+            "level_entries": {1: 10.0},
             "nivel_atual": 1
         }
     }
@@ -69,7 +69,7 @@ if response.status_code == 200:
 
 1. **Seleciona a conta** especificada (PRACTICE ou REAL)
 2. **Pega o saldo atual** da conta
-3. **Calcula nova entrada** como 5% da banca atual
+3. **Calcula nova entrada** como 10% da banca atual
 4. **Reseta o gerenciamento**:
    - Zera total_wins
    - Remove todas as entradas de níveis superiores

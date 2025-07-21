@@ -234,14 +234,14 @@ Content-Type: application/json
 ```json
 {
   "status": "sucesso",
-  "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $5.00 (5% de $100.00)",
+  "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $10.00 (10% de $100.00)",
   "dados": {
     "tipo_conta": "PRACTICE",
     "banca_atual": 100.0,
-    "nova_entrada": 5.0,
+            "nova_entrada": 10.0,
     "estado_apos_reset": {
       "total_wins": 0,
-      "level_entries": {1: 5.0},
+              "level_entries": {1: 10.0},
       "nivel_atual": 1
     }
   }
@@ -362,10 +362,10 @@ O sistema agora implementa a lógica correta do gerenciamento Torre MK:
 #### **📊 Exemplo de Progressão**
 ```
 Banca inicial: $60
-Nível 1: $3.00 (5% da banca)
-Nível 2: $4.50 (+50% sobre nível 1)
-Nível 3: $6.75 (+50% sobre nível 2)
-Nível 4: $10.13 (+50% sobre nível 3)
+Nível 1: $6.00 (10% da banca)
+Nível 2: $9.00 (+50% sobre nível 1)
+Nível 3: $13.50 (+50% sobre nível 2)
+Nível 4: $20.25 (+50% sobre nível 3)
 ```
 
 #### **🔄 Regras de Perda**

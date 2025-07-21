@@ -266,7 +266,7 @@ def rota_resetar_historico():
 @app.route('/resetar_gerenciamento', methods=['POST'])
 @app.route('/management/reset_gerenciamento', methods=['POST'])
 def rota_resetar_gerenciamento():
-    """Reseta apenas o gerenciamento, pegando 5% da banca atual."""
+    """Reseta apenas o gerenciamento, pegando 10% da banca atual."""
     try:
         dados = request.get_json() or {}
         tipo_conta = dados.get('tipo_conta', 'PRACTICE')
@@ -275,8 +275,9 @@ def rota_resetar_gerenciamento():
         trader.selecionar_conta(tipo_conta)
         banca_atual = trader.get_saldo()
         
-        # Calcula nova entrada baseada em 5% da banca atual
-        nova_entrada = round(banca_atual * 0.05, 2)
+        # Calcula nova entrada baseada em 10% da banca atual
+        nova_entrada = round(banca_atual * 0.10, 2)
+        nova_entrada = max(2.0, nova_entrada)  # Garante mínimo de R$ 2,00
         
         # Reseta apenas o gerenciamento
         database.resetar_estado_gerenciamento(db_conn, tipo_conta)
@@ -285,7 +286,7 @@ def rota_resetar_gerenciamento():
         # Verifica se o reset foi aplicado corretamente
         estado_apos_reset = gerenciador_multi.get_estado_gerenciador(tipo_conta)
         
-        mensagem = f"Gerenciamento resetado para {tipo_conta}. Nova entrada: ${nova_entrada} (5% de ${banca_atual})"
+        mensagem = f"Gerenciamento resetado para {tipo_conta}. Nova entrada: ${nova_entrada} (10% de ${banca_atual})"
         
         return jsonify({
             "status": "sucesso", 

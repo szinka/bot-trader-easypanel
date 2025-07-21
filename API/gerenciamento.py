@@ -1,7 +1,6 @@
 # API/gerenciamento.py
 import math
 import logging
-import os
 
 class GerenciamentoTorreMK:
     def __init__(self, banca_inicial, config):
@@ -10,15 +9,16 @@ class GerenciamentoTorreMK:
         self.level_entries = {}
         
         # Entrada inicial baseada na banca inicial
-        entry_lvl_1 = round(banca_inicial * 0.05, 2)  # 5% da banca inicial
-        self.level_entries[1] = max(1.0, entry_lvl_1)
+        entry_lvl_1 = round(banca_inicial * 0.10, 2)  # 10% da banca inicial
+        self.level_entries[1] = max(2.0, entry_lvl_1)  # Mínimo de R$ 2,00
 
     def _get_level_from_wins(self, wins):
         return math.floor(max(0, wins) / self.config['wins_to_level_up']) + 1
 
     def get_proxima_entrada(self):
         nivel_atual = self._get_level_from_wins(self.total_wins)
-        return self.level_entries.get(nivel_atual, 1.0)
+        entrada = self.level_entries.get(nivel_atual, 2.0)
+        return max(2.0, entrada)  # Garante mínimo de R$ 2,00
 
     def processar_resultado(self, resultado, banca_atual):
         nivel_antigo = self._get_level_from_wins(self.total_wins)
@@ -30,12 +30,13 @@ class GerenciamentoTorreMK:
             
             # Se subiu de nível, calcula nova entrada com 50% de aumento
             if nivel_novo > nivel_antigo:
-                entrada_anterior = self.level_entries.get(nivel_antigo, 1.0)
+                entrada_anterior = self.level_entries.get(nivel_antigo, 2.0)
                 nova_entrada = round(entrada_anterior * 1.5, 2)  # 50% de aumento
+                nova_entrada = max(2.0, nova_entrada)  # Garante mínimo de R$ 2,00
                 self.level_entries[nivel_novo] = nova_entrada
                 logging.info(f"Subiu para nível {nivel_novo}, nova entrada: ${nova_entrada}")
         else:
-w            # Lógica de perda
+            # Lógica de perda
             if wins_no_nivel_atual == 0:
                 # Perdeu com 0 wins no nível atual, volta ao nível anterior -2 wins
                 nivel_anterior = max(1, nivel_antigo - 1)
