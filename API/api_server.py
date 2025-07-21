@@ -44,13 +44,6 @@ try:
     
     logging.info("Bot Trader iniciado com sucesso!")
 
-    # Logar status inicial da conta REAL
-    trader.selecionar_conta('REAL')
-    banca_real = trader.get_saldo()
-    estado_real = gerenciador_multi.get_estado_gerenciador('REAL')
-    proxima_entrada = gerenciador_multi.get_proxima_entrada('REAL', banca_real)
-    logging.info(f"[REAL] Banca: ${banca_real} | Wins: {estado_real['total_wins']} | Próxima entrada MK: ${proxima_entrada}")
-
 except Exception as e:
     logging.critical(f"ERRO CRÍTICO DURANTE A INICIALIZAÇÃO: {e}")
     exit()
@@ -373,4 +366,12 @@ def api_status():
     })
 
 if __name__ == "__main__":
+    # Logar status inicial da conta REAL (apenas uma vez)
+    trader.selecionar_conta('REAL')
+    banca_real = trader.get_saldo()
+    estado_real = gerenciador_multi.get_estado_gerenciador('REAL')
+    proxima_entrada = gerenciador_multi.get_proxima_entrada('REAL', banca_real)
+    print("\n✅ Server ligado com sucesso")
+    print(f"[Conta: REAL | Banca: ${banca_real} | Wins: {estado_real['total_wins']} | Próxima entrada MK: ${proxima_entrada}]")
+    print("Pronto pro trade!\n")
     app.run(host='0.0.0.0', port=8080, debug=False)
