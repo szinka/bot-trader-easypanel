@@ -14,12 +14,13 @@ Bot Trader é uma API REST completa para execução automatizada de trades na IQ
 ### ✨ Características
 
 - 🔐 **Autenticação IQ Option** - Conexão segura com a plataforma
-- 💰 **Gerenciamento Torre MK** - Controle automático de entradas
-- 📊 **Múltiplas Contas** - Suporte para conta Real e Practice
+- 💰 **Gerenciamento Torre MK** - Controle automático de entradas com progressão inteligente
+- 📊 **Múltiplas Contas** - Suporte para conta Real e Practice com isolamento completo
 - 🗄️ **Banco PostgreSQL** - Histórico completo de trades
 - 📈 **Monitoramento** - Logs detalhados e métricas
 - 🐳 **Docker Ready** - Deploy simplificado
 - 🌐 **API REST** - Endpoints padronizados
+- 🔄 **Reset de Gerenciamento** - Endpoint para resetar gerenciamento com 5% da banca atual
 
 ## 📋 Pré-requisitos
 
@@ -73,7 +74,6 @@ DATABASE_URL=postgres://user:password@host:5432/database?sslmode=disable
 
 # Trading Configuration
 ENTRY_PERCENTAGE=5.0          # % da banca por entrada
-GERENCIAMENTO_PERCENT=5.0     # % para gerenciamento
 WINS_TO_LEVEL_UP=5            # Wins para subir nível
 LOSS_COMPENSATION=1           # Compensação de perdas
 ```
@@ -83,7 +83,6 @@ LOSS_COMPENSATION=1           # Compensação de perdas
 | Parâmetro | Descrição | Padrão |
 |-----------|-----------|--------|
 | `ENTRY_PERCENTAGE` | % da banca por entrada | 5.0% |
-| `GERENCIAMENTO_PERCENT` | % para gerenciamento | 5.0% |
 | `WINS_TO_LEVEL_UP` | Wins para subir nível | 5 |
 | `LOSS_COMPENSATION` | Compensação de perdas | 1 |
 
@@ -118,6 +117,7 @@ GET /
     "balance": "/balance",
     "history": "/history",
     "management": "/management",
+    "reset_management": "/resetar_gerenciamento",
     "status": "/status"
   }
 }
@@ -205,7 +205,7 @@ GET /history?tipo_conta=PRACTICE
 }
 ```
 
-### ⚙️ Gerenciamento
+### ⚙️ Gerenciamento Torre MK
 ```http
 GET /management?tipo_conta=PRACTICE
 ```
@@ -214,14 +214,41 @@ GET /management?tipo_conta=PRACTICE
 {
   "status": "sucesso",
   "estado": {
-    "total_wins": 0,
-    "level_entries": {"1": 543.03},
-    "nivel_atual": 1
+    "total_wins": 7,
+    "level_entries": {"1": 543.03, "2": 814.55},
+    "nivel_atual": 2
   }
 }
 ```
 
-### 🔄 Resetar Histórico
+### 🔄 Resetar Gerenciamento
+```http
+POST /resetar_gerenciamento
+Content-Type: application/json
+
+{
+  "tipo_conta": "PRACTICE"
+}
+```
+**Resposta:**
+```json
+{
+  "status": "sucesso",
+  "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $5.00 (5% de $100.00)",
+  "dados": {
+    "tipo_conta": "PRACTICE",
+    "banca_atual": 100.0,
+    "nova_entrada": 5.0,
+    "estado_apos_reset": {
+      "total_wins": 0,
+      "level_entries": {1: 5.0},
+      "nivel_atual": 1
+    }
+  }
+}
+```
+
+### 🔄 Resetar Histórico (Completo)
 ```http
 POST /management/reset
 Content-Type: application/json
@@ -248,16 +275,26 @@ GET /status
 ### Teste Completo da API
 ```bash
 # Testa todos os endpoints automaticamente
-python API/test_all_endpoints.py
+python tests/test_integration.py
 ```
 
-Este script testa:
-- ✅ Status da API (`/status`)
-- ✅ Consulta de saldo (`/balance`)
-- ✅ Busca de candles (`/get_candles`)
-- ✅ Execução de trades (`/trade`)
-- ✅ Histórico de trades (`/history`)
-- ✅ Gerenciamento (`/management`)
+### Teste do Gerenciamento
+```bash
+# Testa a lógica do gerenciamento Torre MK
+python .cursor/test_completo_gerenciamento.py
+```
+
+### Teste de Segurança entre Contas
+```bash
+# Testa isolamento entre contas REAL e PRACTICE
+python .cursor/test_seguranca_contas.py
+```
+
+### Teste do Endpoint de Reset
+```bash
+# Testa o endpoint de reset do gerenciamento
+python .cursor/test_endpoint_reset.py
+```
 
 ---
 
@@ -295,7 +332,15 @@ curl -X POST http://localhost:8080/trade \
   }'
 ```
 
-### 4. **Receber Sinais Automáticos**
+### 4. **Resetar Gerenciamento**
+```bash
+# Reset do gerenciamento pegando 5% da banca atual
+curl -X POST http://localhost:8080/resetar_gerenciamento \
+  -H "Content-Type: application/json" \
+  -d '{"tipo_conta": "PRACTICE"}'
+```
+
+### 5. **Receber Sinais Automáticos**
 O bot está pronto para receber sinais via API. Envie POST para `/trade` com:
 - `ativo`: EURUSD-OTC, GBPUSD, etc.
 - `acao`: "call" ou "put"
@@ -303,19 +348,56 @@ O bot está pronto para receber sinais via API. Envie POST para `/trade` com:
 - `tipo_conta`: "PRACTICE" ou "REAL"
 - `valor_entrada`: valor específico ou "gen" para gerenciamento automático
 
-## 💰 Gerenciamento de Risco
+## 💰 Gerenciamento de Risco - Torre MK
 
-### Torre MK
-- **Nível 1**: 5% da banca
-- **Subida de Nível**: A cada 5 wins consecutivos
-- **Compensação**: -1 win por loss, -2 wins se vai cair de nível
+### 🎯 Lógica Atualizada
 
-### Exemplo de Progressão
+O sistema agora implementa a lógica correta do gerenciamento Torre MK:
+
+#### **📈 Progressão de Níveis**
+- **5 wins consecutivos** para subir de nível
+- **Aumento de 50%** apenas no UP de nível (não a cada vitória)
+- **Isolamento completo** entre contas REAL e PRACTICE
+
+#### **📊 Exemplo de Progressão**
 ```
-Nível 1: $543.03 (5% de $10,860)
-Nível 2: $1,086.07 (10% de $10,860)
-Nível 3: $1,629.10 (15% de $10,860)
+Banca inicial: $60
+Nível 1: $3.00 (5% da banca)
+Nível 2: $4.50 (+50% sobre nível 1)
+Nível 3: $6.75 (+50% sobre nível 2)
+Nível 4: $10.13 (+50% sobre nível 3)
 ```
+
+#### **🔄 Regras de Perda**
+- **Perda normal**: -1 win
+- **Perda com 0 wins no nível**: Volta ao nível anterior -2 wins
+- **Exemplo**: Nível 3 com 0 wins → perde → volta para nível 2 com 3 wins
+
+#### **🛡️ Segurança**
+- ✅ **Contas isoladas**: REAL e PRACTICE completamente separadas
+- ✅ **Reset inteligente**: Endpoint calcula nova entrada como 5% da banca atual
+- ✅ **Persistência**: Estados salvos no banco de dados
+- ✅ **Logs detalhados**: Monitoramento completo das operações
+
+### 🔄 Endpoint de Reset
+
+#### **Reset do Gerenciamento**
+```bash
+# Reset pegando 5% da banca atual
+curl -X POST http://localhost:8080/resetar_gerenciamento \
+  -H "Content-Type: application/json" \
+  -d '{"tipo_conta": "PRACTICE"}'
+```
+
+#### **O que o reset faz:**
+1. **Seleciona a conta** especificada
+2. **Pega o saldo atual** da conta
+3. **Calcula nova entrada** como 5% da banca atual
+4. **Reseta o gerenciamento**:
+   - Zera total_wins
+   - Remove entradas de níveis superiores
+   - Define nova entrada inicial
+5. **Salva no banco** o novo estado
 
 ## 🐳 Deploy com EasyPanel
 
@@ -386,6 +468,11 @@ curl http://localhost:8080/status
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
   -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
+
+# Testar reset do gerenciamento
+curl -X POST http://localhost:8080/resetar_gerenciamento \
+  -H "Content-Type: application/json" \
+  -d '{"tipo_conta":"PRACTICE"}'
 ```
 
 ## 📊 Monitoramento
@@ -395,6 +482,8 @@ curl -X POST http://localhost:8080/trade \
 - `INFO - Conexão com IQ Option bem-sucedida.` - Conexão OK
 - `INFO - Saldo inicial (PRACTICE): $10860.65` - Saldo carregado
 - `INFO - Trade executado com sucesso!` - Trade realizado
+- `INFO - Subiu para nível X, nova entrada: $Y` - UP de nível
+- `INFO - Perdeu com 0 wins no nível X, voltou para nível Y -2 wins` - Regra de perda
 
 ### Métricas
 - **Saldo Atual** - Consulta via `/balance`
@@ -423,6 +512,7 @@ curl -X POST http://localhost:8080/trade \
 - ✅ **Configure firewall** adequadamente
 - ✅ **Monitore logs** regularmente
 - ✅ **Faça backup** do banco de dados
+- ✅ **Teste sempre** na conta PRACTICE primeiro
 
 ### Variáveis Sensíveis
 ```env
@@ -442,10 +532,18 @@ curl http://localhost:8080/status
 # 2. Saldo da conta
 curl http://localhost:8080/balance?tipo_conta=PRACTICE
 
-# 3. Teste de trade
+# 3. Estado do gerenciamento
+curl http://localhost:8080/management?tipo_conta=PRACTICE
+
+# 4. Teste de trade
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
   -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
+
+# 5. Reset do gerenciamento
+curl -X POST http://localhost:8080/resetar_gerenciamento \
+  -H "Content-Type: application/json" \
+  -d '{"tipo_conta":"PRACTICE"}'
 ```
 
 ### Problemas Comuns
@@ -453,6 +551,7 @@ curl -X POST http://localhost:8080/trade \
 2. **Trade Rejeitado** - Use EURUSD-OTC, verifique saldo
 3. **Deploy Falhou** - Verifique Dockerfile e variáveis
 4. **Banco de Dados** - Configure DATABASE_URL
+5. **Gerenciamento** - Use endpoint de reset para corrigir
 
 ---
 
@@ -460,4 +559,13 @@ curl -X POST http://localhost:8080/trade \
 
 **🔒 Segurança:** Nunca compartilhe suas credenciais IQ Option.
 
-**💰 Sucesso:** Sistema testado e funcionando com EURUSD-OTC! 
+**💰 Sucesso:** Sistema testado e funcionando com EURUSD-OTC e gerenciamento Torre MK otimizado! 
+
+**🔄 Atualizações Recentes:**
+- ✅ Lógica do gerenciamento Torre MK corrigida
+- ✅ 5 wins para subir de nível
+- ✅ Aumento de 50% apenas no UP de nível
+- ✅ Regra de perda com 0 wins implementada
+- ✅ Endpoint de reset do gerenciamento
+- ✅ Isolamento completo entre contas
+- ✅ Testes completos adicionados 
