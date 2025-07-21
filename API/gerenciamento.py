@@ -6,6 +6,7 @@ class GerenciamentoTorreMK:
     def __init__(self, banca_inicial, config):
         self.config = config
         self.total_wins = 0
+        self.total_losses = 0  # Novo campo para derrotas
         self.level_entries = {}
         
         # Entrada inicial baseada na banca inicial
@@ -14,6 +15,12 @@ class GerenciamentoTorreMK:
 
     def _get_level_from_wins(self, wins):
         return math.floor(max(0, wins) / self.config['wins_to_level_up']) + 1
+
+    def get_winrate(self):
+        total = self.total_wins + self.total_losses
+        if total == 0:
+            return 0.0
+        return (self.total_wins / total) * 100
 
     def get_proxima_entrada(self):
         nivel_atual = self._get_level_from_wins(self.total_wins)
@@ -36,6 +43,7 @@ class GerenciamentoTorreMK:
                 self.level_entries[nivel_novo] = nova_entrada
                 logging.info(f"Subiu para nível {nivel_novo}, nova entrada: ${nova_entrada}")
         else:
+            self.total_losses += 1  # Incrementa derrotas
             # Lógica de perda
             if wins_no_nivel_atual == 0:
                 # Perdeu com 0 wins no nível atual, volta ao nível anterior -2 wins
@@ -123,8 +131,10 @@ class GerenciadorMultiConta:
             gerenciador = self.gerenciadores[tipo_conta]
             return {
                 'total_wins': gerenciador.total_wins,
+                'total_losses': getattr(gerenciador, 'total_losses', 0),
                 'level_entries': gerenciador.level_entries,
-                'nivel_atual': gerenciador._get_level_from_wins(gerenciador.total_wins)
+                'nivel_atual': gerenciador._get_level_from_wins(gerenciador.total_wins),
+                'winrate': gerenciador.get_winrate()
             }
         return None
     

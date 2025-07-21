@@ -44,6 +44,13 @@ try:
     
     logging.info("Bot Trader iniciado com sucesso!")
 
+    # Logar status inicial da conta REAL
+    trader.selecionar_conta('REAL')
+    banca_real = trader.get_saldo()
+    estado_real = gerenciador_multi.get_estado_gerenciador('REAL')
+    proxima_entrada = gerenciador_multi.get_proxima_entrada('REAL', banca_real)
+    logging.info(f"[REAL] Banca: ${banca_real} | Wins: {estado_real['total_wins']} | Próxima entrada MK: ${proxima_entrada}")
+
 except Exception as e:
     logging.critical(f"ERRO CRÍTICO DURANTE A INICIALIZAÇÃO: {e}")
     exit()
@@ -161,6 +168,14 @@ def rota_de_trade():
         if not check:
             return jsonify({"status": "erro", "mensagem": "Ordem rejeitada em Binária e Digital"}), 500
 
+        # Atualiza gerenciamento após trade
+        if acao in ['call', 'put']:
+            resultado = sinal.get('resultado')
+            if resultado in ['win', 'lose']:
+                gerenciador_multi.processar_resultado(tipo_conta, resultado, saldo_anterior)
+                estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
+                winrate = estado.get('winrate', 0)
+                logging.info(f"[{tipo_conta.upper()}] {resultado.capitalize()}! Winrate: {winrate:.2f}%")
         # Retorna resposta instantânea com informações do trade
         return jsonify({
             "status": "sucesso",
