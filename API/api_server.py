@@ -471,7 +471,7 @@ def rota_grafico_dados():
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
-        # --- Garante que a coluna Volume sempre exista ---
+        # --- Garante que a coluna Volume sempre exista e está na ordem correta ---
         if 'Volume' not in df.columns:
             df['Volume'] = 0.0
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
@@ -491,7 +491,7 @@ def rota_grafico_dados():
             'Hist': macd_hist
         }, index=df.index)
 
-        # --- Subplot do MACD (painel 1, não sobrepor o principal) ---
+        # --- Subplot do MACD ---
         apds = [
             mpf.make_addplot(macd_df['MACD'], panel=1, color='cyan', secondary_y=False, ylabel='MACD'),
             mpf.make_addplot(macd_df['Signal'], panel=1, color='magenta', secondary_y=False),
@@ -514,9 +514,9 @@ def rota_grafico_dados():
             rc={'font.size': 12, 'axes.labelcolor': 'white', 'axes.edgecolor': 'white', 'axes.titlesize': 16, 'axes.titleweight': 'bold', 'xtick.color': 'white', 'ytick.color': 'white'}
         )
 
-        # --- GERA O GRÁFICO E ADICIONA LINHAS EXTRAS ---
+        import io
         buf = io.BytesIO()
-        fig, axes = mpf.plot(
+        mpf.plot(
             df,
             type='candle',
             style=s,
@@ -529,15 +529,8 @@ def rota_grafico_dados():
             volume=True,
             addplot=apds,
             panel_ratios=(3,1),
-            returnfig=True,
             savefig=dict(fname=buf, format='png', facecolor='#181c25', bbox_inches='tight')
         )
-        ax = axes[0]  # painel principal
-
-        # --- Ajusta o número de marcas de preço no eixo Y para 10 ---
-        import matplotlib.ticker as mticker
-        ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=10))
-
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
