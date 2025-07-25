@@ -426,6 +426,7 @@ def rota_grafico_dados():
     """
     Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
     Adiciona volume, média móvel (SMA 9), MACD, visualizador do preço atual e linhas de SR tocadas 2 vezes.
+    Garante que a coluna Volume sempre exista.
     """
     try:
         import matplotlib
@@ -436,7 +437,7 @@ def rota_grafico_dados():
         import numpy as np
         import io
 
-        # Tenta pegar JSON
+        # --- Processamento dos candles ---
         dados = request.get_json(silent=True)
         if dados and 'candles' in dados:
             candles = dados['candles']
@@ -456,7 +457,6 @@ def rota_grafico_dados():
             matches = re.findall(padrao, texto)
             if not matches:
                 return jsonify({"status": "erro", "mensagem": "Formato de dados inválido."}), 400
-            # Volume é opcional
             if len(matches[0]) == 6:
                 df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low', 'Volume'])
                 df['Volume'] = df['Volume'].replace('', '0').astype(float)
@@ -468,12 +468,15 @@ def rota_grafico_dados():
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
+        # --- Garante que a coluna Volume sempre exista ---
+        if 'Volume' not in df.columns:
+            df['Volume'] = 0.0
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
 
-        # Média móvel de 9 períodos
+        # --- Média móvel de 9 períodos ---
         mav = (9,)
 
-        # Calcula MACD
+        # --- Calcula MACD ---
         exp12 = df['Close'].ewm(span=12, adjust=False).mean()
         exp26 = df['Close'].ewm(span=26, adjust=False).mean()
         macd = exp12 - exp26
@@ -485,14 +488,14 @@ def rota_grafico_dados():
             'Hist': macd_hist
         }, index=df.index)
 
-        # Subplot do MACD
+        # --- Subplot do MACD (painel 1, não sobrepor o principal) ---
         apds = [
             mpf.make_addplot(macd_df['MACD'], panel=1, color='cyan', secondary_y=False, ylabel='MACD'),
             mpf.make_addplot(macd_df['Signal'], panel=1, color='magenta', secondary_y=False),
             mpf.make_addplot(macd_df['Hist'], panel=1, type='bar', color='dimgray', secondary_y=False)
         ]
 
-        # Customização visual
+        # --- Customização visual ---
         mc = mpf.make_marketcolors(
             up='#26a69a', down='#ef5350',
             edge='inherit', wick='inherit',
@@ -530,9 +533,7 @@ def rota_grafico_dados():
 
         # 1. Preço atual (último fechamento)
         preco_atual = df['Close'].iloc[-1]
-        # Linha do preço atual
         ax.axhline(preco_atual, color='deepskyblue', linestyle='--', linewidth=2, alpha=0.8)
-        # Caixa do preço atual na lateral direita
         ax.text(df.index[-1], preco_atual, f'{preco_atual:.5f}', color='white', fontsize=12,
                 bbox=dict(facecolor='deepskyblue', edgecolor='none', boxstyle='round,pad=0.3'),
                 verticalalignment='center', horizontalalignment='left')
