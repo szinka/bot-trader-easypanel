@@ -401,6 +401,29 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
    - Define nova entrada inicial
 5. **Salva no banco** o novo estado
 
+## NOVA LÓGICA DE GERENCIAMENTO DE ENTRADA
+
+Agora, o valor de entrada para cada operação é sempre calculado como uma porcentagem do saldo atual da conta (REAL ou PRACTICE), conforme informado no campo `valor_entrada` do input HTTP.
+
+- Se você enviar `"valor_entrada": 10`, a operação usará 10% do saldo atual.
+- Se não informar, será usado o padrão de 10% do saldo.
+- O valor mínimo de entrada é R$ 2,00.
+- O gerenciamento por nível não influencia mais o valor da operação.
+
+**Exemplo de requisição:**
+
+```json
+{
+  "ativo": "EURUSD",
+  "acao": "call",
+  "duracao": 5,
+  "tipo_conta": "REAL",
+  "valor_entrada": 15
+}
+```
+
+Esse exemplo fará uma operação usando 15% do saldo da conta REAL.
+
 ## 🐳 Deploy com EasyPanel
 
 ### 1. **Configuração no EasyPanel**
