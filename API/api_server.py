@@ -421,6 +421,83 @@ def rota_get_grafico():
         logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
+@app.route('/grafico_dados', methods=['POST'])
+def rota_grafico_dados():
+    """
+    Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick.
+    Espera um JSON com lista de candles ou um texto formatado.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        import pandas as pd
+        import re
+
+        # Tenta pegar JSON
+        dados = request.get_json(silent=True)
+        if dados and 'candles' in dados:
+            candles = dados['candles']
+            df = pd.DataFrame(candles)
+            # Espera colunas: 'data', 'abertura', 'fechamento', 'maxima', 'minima'
+            df['data'] = pd.to_datetime(df['data'])
+            df.rename(columns={
+                'abertura': 'Open',
+                'fechamento': 'Close',
+                'maxima': 'High',
+                'minima': 'Low'
+            }, inplace=True)
+            df.set_index('data', inplace=True)
+        else:
+            # Tenta pegar texto puro
+            texto = request.data.decode('utf-8')
+            padrao = r"Data: ([^,]+), Abertura: ([^,]+), Fechamento: ([^,]+), Máxima: ([^,]+), Mínima: ([^\n]+)"
+            matches = re.findall(padrao, texto)
+            if not matches:
+                return jsonify({"status": "erro", "mensagem": "Formato de dados inválido."}), 400
+            df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low'])
+            df['data'] = pd.to_datetime(df['data'])
+            for col in ['Open', 'Close', 'High', 'Low']:
+                df[col] = df[col].astype(float)
+            df.set_index('data', inplace=True)
+
+        # Gera o gráfico
+        fig, ax = plt.subplots(figsize=(12, 6), facecolor='#0d1117')
+        ax.set_facecolor('#0d1117')
+        width = 0.6
+        width2 = 0.1
+        up = df[df.Close >= df.Open]
+        down = df[df.Close < df.Open]
+        up_color = '#26a69a'
+        down_color = '#ef5350'
+        text_color = '#c9d1d9'
+        border_color = '#21262d'
+        ax.bar(up.index, up.Close - up.Open, width, bottom=up.Open, color=up_color)
+        ax.bar(up.index, up.High - up.Close, width2, bottom=up.Close, color=up_color, align='center')
+        ax.bar(up.index, up.Low - up.Open, width2, bottom=up.Open, color=up_color, align='center')
+        ax.bar(down.index, down.Close - down.Open, width, bottom=down.Open, color=down_color)
+        ax.bar(down.index, down.High - down.Open, width2, bottom=down.Open, color=down_color, align='center')
+        ax.bar(down.index, down.Low - down.Close, width2, bottom=down.Close, color=down_color, align='center')
+        ax.grid(True, color=border_color, linestyle='--', linewidth=0.5)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.xticks(rotation=30, color=text_color)
+        plt.yticks(color=text_color)
+        plt.title('Gráfico de Candlestick', color=text_color, fontsize=16)
+        plt.ylabel('Preço', color=text_color, fontsize=12)
+        plt.xlabel('Horário', color=text_color, fontsize=12)
+        for spine in ax.spines.values():
+            spine.set_edgecolor(border_color)
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none', dpi=100)
+        buf.seek(0)
+        plt.close(fig)
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
 # --- API Status ---
 @app.route('/', methods=['GET'])
 def api_status():
