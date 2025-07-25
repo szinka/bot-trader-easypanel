@@ -534,23 +534,9 @@ def rota_grafico_dados():
         )
         ax = axes[0]  # painel principal
 
-        # --- ISOLA O INDICADOR DO PREÇO ATUAL ---
-        try:
-            preco_atual = float(df['Close'].iloc[-1])
-            ax.axhline(preco_atual, color='deepskyblue', linestyle='--', linewidth=2, alpha=0.8)
-            ax.text(df.index[-1], preco_atual, f'{preco_atual:.5f}', color='white', fontsize=12,
-                    bbox=dict(facecolor='deepskyblue', edgecolor='none', boxstyle='round,pad=0.3'),
-                    verticalalignment='center', horizontalalignment='left')
-        except Exception as e:
-            logging.warning(f'Não foi possível desenhar o preço atual: {e}')
-
-        # --- Suportes/Resistências tocados 2 vezes ---
-        precos_sr = np.concatenate([df['High'].values, df['Low'].values])
-        precos_sr = np.round(precos_sr, 5)
-        unicos, contagens = np.unique(precos_sr, return_counts=True)
-        sr_niveis = unicos[contagens >= 2]
-        for nivel in sr_niveis:
-            ax.axhline(nivel, color='orange', linestyle=':', linewidth=1, alpha=0.7)
+        # --- Ajusta o número de marcas de preço no eixo Y para 10 ---
+        import matplotlib.ticker as mticker
+        ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=10))
 
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
