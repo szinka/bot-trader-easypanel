@@ -425,7 +425,7 @@ def rota_get_grafico():
 def rota_grafico_dados():
     """
     Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
-    Adiciona volume, média móvel (SMA 9) e MACD como subplot, com visual escuro.
+    Adiciona volume, média móvel (SMA 9), MACD, visualizador do preço atual e linhas de SR tocadas 2 vezes.
     """
     try:
         import matplotlib
@@ -434,6 +434,7 @@ def rota_grafico_dados():
         import re
         import mplfinance as mpf
         import numpy as np
+        import io
 
         # Tenta pegar JSON
         dados = request.get_json(silent=True)
@@ -507,9 +508,9 @@ def rota_grafico_dados():
             rc={'font.size': 12, 'axes.labelcolor': 'white', 'axes.edgecolor': 'white', 'axes.titlesize': 16, 'axes.titleweight': 'bold', 'xtick.color': 'white', 'ytick.color': 'white'}
         )
 
-        import io
+        # --- GERA O GRÁFICO E ADICIONA LINHAS EXTRAS ---
         buf = io.BytesIO()
-        mpf.plot(
+        fig, axes = mpf.plot(
             df,
             type='candle',
             style=s,
@@ -522,8 +523,28 @@ def rota_grafico_dados():
             volume=True,
             addplot=apds,
             panel_ratios=(3,1),
+            returnfig=True,
             savefig=dict(fname=buf, format='png', facecolor='#181c25', bbox_inches='tight')
         )
+        ax = axes[0]  # painel principal
+
+        # 1. Preço atual (último fechamento)
+        preco_atual = df['Close'].iloc[-1]
+        # Linha do preço atual
+        ax.axhline(preco_atual, color='deepskyblue', linestyle='--', linewidth=2, alpha=0.8)
+        # Caixa do preço atual na lateral direita
+        ax.text(df.index[-1], preco_atual, f'{preco_atual:.5f}', color='white', fontsize=12,
+                bbox=dict(facecolor='deepskyblue', edgecolor='none', boxstyle='round,pad=0.3'),
+                verticalalignment='center', horizontalalignment='left')
+
+        # 2. Suportes/Resistências tocados 2 vezes
+        precos_sr = np.concatenate([df['High'].values, df['Low'].values])
+        precos_sr = np.round(precos_sr, 5)
+        unicos, contagens = np.unique(precos_sr, return_counts=True)
+        sr_niveis = unicos[contagens >= 2]
+        for nivel in sr_niveis:
+            ax.axhline(nivel, color='orange', linestyle=':', linewidth=1, alpha=0.7)
+
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
