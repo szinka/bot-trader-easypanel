@@ -426,7 +426,7 @@ def rota_grafico_dados():
     """
     Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
     Adiciona volume, média móvel (SMA 9), MACD, visualizador do preço atual e linhas de SR tocadas 2 vezes.
-    Garante que a coluna Volume sempre exista.
+    Garante robustez para volume, ordem dos candles e visualização do preço atual.
     """
     try:
         import matplotlib
@@ -436,11 +436,14 @@ def rota_grafico_dados():
         import mplfinance as mpf
         import numpy as np
         import io
+        import logging
 
         # --- Processamento dos candles ---
         dados = request.get_json(silent=True)
         if dados and 'candles' in dados:
             candles = dados['candles']
+            # Ordena do mais antigo para o mais recente
+            candles.sort(key=lambda c: pd.to_datetime(c['data']))
             df = pd.DataFrame(candles)
             df['data'] = pd.to_datetime(df['data'])
             df.rename(columns={
@@ -531,14 +534,17 @@ def rota_grafico_dados():
         )
         ax = axes[0]  # painel principal
 
-        # 1. Preço atual (último fechamento)
-        preco_atual = df['Close'].iloc[-1]
-        ax.axhline(preco_atual, color='deepskyblue', linestyle='--', linewidth=2, alpha=0.8)
-        ax.text(df.index[-1], preco_atual, f'{preco_atual:.5f}', color='white', fontsize=12,
-                bbox=dict(facecolor='deepskyblue', edgecolor='none', boxstyle='round,pad=0.3'),
-                verticalalignment='center', horizontalalignment='left')
+        # --- ISOLA O INDICADOR DO PREÇO ATUAL ---
+        try:
+            preco_atual = float(df['Close'].iloc[-1])
+            ax.axhline(preco_atual, color='deepskyblue', linestyle='--', linewidth=2, alpha=0.8)
+            ax.text(df.index[-1], preco_atual, f'{preco_atual:.5f}', color='white', fontsize=12,
+                    bbox=dict(facecolor='deepskyblue', edgecolor='none', boxstyle='round,pad=0.3'),
+                    verticalalignment='center', horizontalalignment='left')
+        except Exception as e:
+            logging.warning(f'Não foi possível desenhar o preço atual: {e}')
 
-        # 2. Suportes/Resistências tocados 2 vezes
+        # --- Suportes/Resistências tocados 2 vezes ---
         precos_sr = np.concatenate([df['High'].values, df['Low'].values])
         precos_sr = np.round(precos_sr, 5)
         unicos, contagens = np.unique(precos_sr, return_counts=True)
