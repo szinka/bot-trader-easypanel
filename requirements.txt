@@ -7,3 +7,4 @@ websocket-client==0.56.0
 gunicorn==21.2.0
 pytest==8.2.2
 matplotlib==3.8.0
+pandas==2.2.0
