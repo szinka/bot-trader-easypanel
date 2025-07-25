@@ -424,16 +424,15 @@ def rota_get_grafico():
 @app.route('/grafico_dados', methods=['POST'])
 def rota_grafico_dados():
     """
-    Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick.
+    Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
     Espera um JSON com lista de candles ou um texto formatado.
     """
     try:
         import matplotlib
         matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        import matplotlib.dates as mdates
         import pandas as pd
         import re
+        import mplfinance as mpf
 
         # Tenta pegar JSON
         dados = request.get_json(silent=True)
@@ -462,37 +461,24 @@ def rota_grafico_dados():
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
-        # Gera o gráfico
-        fig, ax = plt.subplots(figsize=(12, 6), facecolor='#0d1117')
-        ax.set_facecolor('#0d1117')
-        width = 0.6
-        width2 = 0.1
-        up = df[df.Close >= df.Open]
-        down = df[df.Close < df.Open]
-        up_color = '#26a69a'
-        down_color = '#ef5350'
-        text_color = '#c9d1d9'
-        border_color = '#21262d'
-        ax.bar(up.index, up.Close - up.Open, width, bottom=up.Open, color=up_color)
-        ax.bar(up.index, up.High - up.Close, width2, bottom=up.Close, color=up_color, align='center')
-        ax.bar(up.index, up.Low - up.Open, width2, bottom=up.Open, color=up_color, align='center')
-        ax.bar(down.index, down.Close - down.Open, width, bottom=down.Open, color=down_color)
-        ax.bar(down.index, down.High - down.Open, width2, bottom=down.Open, color=down_color, align='center')
-        ax.bar(down.index, down.Low - down.Close, width2, bottom=down.Close, color=down_color, align='center')
-        ax.grid(True, color=border_color, linestyle='--', linewidth=0.5)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        plt.xticks(rotation=30, color=text_color)
-        plt.yticks(color=text_color)
-        plt.title('Gráfico de Candlestick', color=text_color, fontsize=16)
-        plt.ylabel('Preço', color=text_color, fontsize=12)
-        plt.xlabel('Horário', color=text_color, fontsize=12)
-        for spine in ax.spines.values():
-            spine.set_edgecolor(border_color)
-        plt.tight_layout()
+        # Garante que as colunas estejam na ordem correta
+        df = df[['Open', 'High', 'Low', 'Close']]
+
+        # Gera o gráfico de candlestick real com mplfinance
+        import io
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none', dpi=100)
+        mpf.plot(
+            df,
+            type='candle',
+            style='charles',
+            figsize=(12, 6),
+            title='Gráfico de Candlestick',
+            ylabel='Preço',
+            ylabel_lower='',
+            xrotation=30,
+            savefig=dict(fname=buf, format='png', facecolor='#0d1117', bbox_inches='tight')
+        )
         buf.seek(0)
-        plt.close(fig)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
         logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
