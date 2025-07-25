@@ -425,7 +425,7 @@ def rota_get_grafico():
 def rota_grafico_dados():
     """
     Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
-    Espera um JSON com lista de candles ou um texto formatado.
+    Adiciona volume, média móvel (SMA 9) e MACD como subplot, com visual escuro.
     """
     try:
         import matplotlib
@@ -433,50 +433,96 @@ def rota_grafico_dados():
         import pandas as pd
         import re
         import mplfinance as mpf
+        import numpy as np
 
         # Tenta pegar JSON
         dados = request.get_json(silent=True)
         if dados and 'candles' in dados:
             candles = dados['candles']
             df = pd.DataFrame(candles)
-            # Espera colunas: 'data', 'abertura', 'fechamento', 'maxima', 'minima'
             df['data'] = pd.to_datetime(df['data'])
             df.rename(columns={
                 'abertura': 'Open',
                 'fechamento': 'Close',
                 'maxima': 'High',
-                'minima': 'Low'
+                'minima': 'Low',
+                'volume': 'Volume'
             }, inplace=True)
             df.set_index('data', inplace=True)
         else:
-            # Tenta pegar texto puro
             texto = request.data.decode('utf-8')
-            padrao = r"Data: ([^,]+), Abertura: ([^,]+), Fechamento: ([^,]+), Máxima: ([^,]+), Mínima: ([^\n]+)"
+            padrao = r"Data: ([^,]+), Abertura: ([^,]+), Fechamento: ([^,]+), Máxima: ([^,]+), Mínima: ([^,]+)(?:, Volume: ([^\n]+))?"
             matches = re.findall(padrao, texto)
             if not matches:
                 return jsonify({"status": "erro", "mensagem": "Formato de dados inválido."}), 400
-            df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low'])
+            # Volume é opcional
+            if len(matches[0]) == 6:
+                df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low', 'Volume'])
+                df['Volume'] = df['Volume'].replace('', '0').astype(float)
+            else:
+                df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low'])
+                df['Volume'] = 0.0
             df['data'] = pd.to_datetime(df['data'])
             for col in ['Open', 'Close', 'High', 'Low']:
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
-        # Garante que as colunas estejam na ordem correta
-        df = df[['Open', 'High', 'Low', 'Close']]
+        df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
 
-        # Gera o gráfico de candlestick real com mplfinance
+        # Média móvel de 9 períodos
+        mav = (9,)
+
+        # Calcula MACD
+        exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+        macd = exp12 - exp26
+        signal = macd.ewm(span=9, adjust=False).mean()
+        macd_hist = macd - signal
+        macd_df = pd.DataFrame({
+            'MACD': macd,
+            'Signal': signal,
+            'Hist': macd_hist
+        }, index=df.index)
+
+        # Subplot do MACD
+        apds = [
+            mpf.make_addplot(macd_df['MACD'], panel=1, color='cyan', secondary_y=False, ylabel='MACD'),
+            mpf.make_addplot(macd_df['Signal'], panel=1, color='magenta', secondary_y=False),
+            mpf.make_addplot(macd_df['Hist'], panel=1, type='bar', color='dimgray', secondary_y=False)
+        ]
+
+        # Customização visual
+        mc = mpf.make_marketcolors(
+            up='#26a69a', down='#ef5350',
+            edge='inherit', wick='inherit',
+            volume='in', ohlc='inherit'
+        )
+        s = mpf.make_mpf_style(
+            base_mpf_style='nightclouds',
+            marketcolors=mc,
+            facecolor='#181c25',
+            edgecolor='#181c25',
+            gridcolor='#444',
+            gridstyle='--',
+            rc={'font.size': 12, 'axes.labelcolor': 'white', 'axes.edgecolor': 'white', 'axes.titlesize': 16, 'axes.titleweight': 'bold', 'xtick.color': 'white', 'ytick.color': 'white'}
+        )
+
         import io
         buf = io.BytesIO()
         mpf.plot(
             df,
             type='candle',
-            style='charles',
-            figsize=(12, 6),
+            style=s,
+            figsize=(12, 8),
             title='Gráfico de Candlestick',
             ylabel='Preço',
             ylabel_lower='',
             xrotation=30,
-            savefig=dict(fname=buf, format='png', facecolor='#0d1117', bbox_inches='tight')
+            mav=mav,
+            volume=True,
+            addplot=apds,
+            panel_ratios=(3,1),
+            savefig=dict(fname=buf, format='png', facecolor='#181c25', bbox_inches='tight')
         )
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
