@@ -363,12 +363,27 @@ def rota_get_grafico():
 
         # Processa os dados
         df = pd.DataFrame(velas)
-        df['from'] = pd.to_datetime(df['from'], unit='s')
-        df.rename(columns={
-            'from': 'Datetime', 'open': 'Open', 'high': 'High',
-            'low': 'Low', 'close': 'Close'
-        }, inplace=True)
+        # Força o rename para garantir as colunas corretas
+        rename_map = {}
+        for col in df.columns:
+            if col.lower() == 'from':
+                rename_map[col] = 'Datetime'
+            elif col.lower() == 'open':
+                rename_map[col] = 'Open'
+            elif col.lower() == 'high':
+                rename_map[col] = 'High'
+            elif col.lower() == 'low':
+                rename_map[col] = 'Low'
+            elif col.lower() == 'close':
+                rename_map[col] = 'Close'
+        df.rename(columns=rename_map, inplace=True)
+        df['Datetime'] = pd.to_datetime(df['Datetime'], unit='s')
         df.set_index('Datetime', inplace=True)
+
+        # Verifica se todas as colunas necessárias existem
+        for col in ['Open', 'High', 'Low', 'Close']:
+            if col not in df.columns:
+                return jsonify({"status": "erro", "mensagem": f"Coluna '{col}' não encontrada nos dados."}), 500
 
         # Gera o gráfico
         fig, ax = plt.subplots(figsize=(12, 6), facecolor='#0d1117')
