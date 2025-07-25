@@ -1,366 +1,186 @@
-# API/api_server.py
-from flask import Flask, request, jsonify
-import logging
+# szinka/bot-trader-easypanel/bot-trader-easypanel-7b08e2b809dd38380d631d984c10ad6c7132fcde/API/api_server.py
+
 import os
-import time
-import decimal
+import sys
+import logging
+from flask import Flask, request, jsonify, send_file
 from dotenv import load_dotenv
+import psycopg2
+from psycopg2 import pool
+import io
+import matplotlib
+matplotlib.use('Agg')  # Modo "headless" para não precisar de interface gráfica
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import pandas as pd
 
-# Carrega as variáveis de ambiente
+# Adiciona a pasta raiz ao path para encontrar o módulo Trader
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from Bot.trader import Trader  # noqa: E402
+
+# --- Configuração Inicial ---
 load_dotenv()
-
-# Importa os módulos essenciais
-from API.trader import Trader
-from API.gerenciamento import GerenciadorMultiConta
-import API.database as database
-
-# Configuração básica de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# --- Configuração do Flask ---
 app = Flask(__name__)
 
-# --- Inicialização dos Componentes ---
+# --- Conexão com o Banco de Dados (PostgreSQL) ---
+try:
+    db_pool = psycopg2.pool.SimpleConnectionPool(
+        1, 10,
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        database=os.getenv("DB_DATABASE")
+    )
+    logging.info("Pool de conexões com o PostgreSQL criado com sucesso.")
+except Exception as e:
+    logging.error(f"Não foi possível conectar ao PostgreSQL: {e}")
+    db_pool = None
+
+# --- Instância do Trader ---
 try:
     trader = Trader()
-    db_conn = database.get_db_connection()
-    database.setup_database(db_conn)
-
-    config_gerenciamento = {
-        'entry_percentage': float(os.getenv('ENTRY_PERCENTAGE', 5.0)),
-        'wins_to_level_up': int(os.getenv('WINS_TO_LEVEL_UP', 5)),
-        'loss_compensation': int(os.getenv('LOSS_COMPENSATION', 1))
-    }
-    
-    # Log das configurações carregadas
-    logging.info(f"Configurações carregadas:")
-    logging.info(f"  - ENTRY_PERCENTAGE: {os.getenv('ENTRY_PERCENTAGE', 5.0)}%")
-    logging.info(f"  - GERENCIAMENTO_PERCENT: {os.getenv('GERENCIAMENTO_PERCENT', 5.0)}%")
-    logging.info(f"  - WINS_TO_LEVEL_UP: {os.getenv('WINS_TO_LEVEL_UP', 5)}")
-    logging.info(f"  - LOSS_COMPENSATION: {os.getenv('LOSS_COMPENSATION', 1)}")
-    
-    # Inicializa o gerenciador multi-conta
-    gerenciador_multi = GerenciadorMultiConta(config_gerenciamento)
-    
-    logging.info("Bot Trader iniciado com sucesso!")
-
+    trader.connect()
+    logging.info("Instância do Trader criada e conectada com sucesso.")
 except Exception as e:
-    logging.critical(f"ERRO CRÍTICO DURANTE A INICIALIZAÇÃO: {e}")
-    exit()
+    logging.error(f"Falha ao instanciar ou conectar o Trader: {e}")
+    trader = None
 
-# --- Endpoints Essenciais ---
+# --- Endpoints da API ---
+
+@app.route('/status', methods=['GET'])
+def get_status():
+    """Verifica o status da API, da conexão com a IQ Option e com o banco de dados."""
+    db_status = "conectado" if db_pool else "desconectado"
+    iq_status = "conectado" if trader and trader.is_connected() else "desconectado"
+    
+    return jsonify({
+        "status_api": "online",
+        "status_iq_option": iq_status,
+        "status_database": db_status
+    })
+
 @app.route('/profile', methods=['GET'])
-def rota_get_profile():
-    """Retorna a moeda da conta selecionada."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        moeda = trader.get_moeda_conta()
+def get_profile():
+    """Retorna as informações do perfil do usuário da IQ Option."""
+    if trader and trader.is_connected():
         return jsonify({
             "status": "sucesso",
-            "conta": tipo_conta.upper(),
-            "moeda": moeda
+            "data": trader.get_profile()
         })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+    return jsonify({"status": "erro", "mensagem": "Trader não conectado"}), 503
 
 @app.route('/balance', methods=['GET'])
-def rota_get_saldo():
-    """Consulta saldo da conta."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        moeda = trader.get_moeda_conta()
-        saldo = trader.get_saldo()
-        logging.info(f"Consulta de saldo para conta {tipo_conta} ({moeda})")
-        
-        return jsonify({
-            "status": "sucesso", 
-            "saldo": saldo, 
-            "conta": tipo_conta.upper(),
-            "moeda": moeda,
-            "mensagem": f"Saldo atual na conta {tipo_conta.upper()}: {moeda} {saldo}"
-        })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/get_candles', methods=['POST'])
-def rota_get_candles():
-    """Busca candles de um ativo."""
-    try:
-        dados = request.get_json()
-        
-        # Validações básicas
-        if not dados or 'ativo' not in dados or 'timeframe' not in dados or 'quantidade' not in dados:
-            return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, timeframe, quantidade"}), 400
-        
-        velas = trader.get_candles(dados['ativo'], dados['timeframe'], dados['quantidade'])
-        
-        if not velas:
-            return jsonify({"status": "erro", "mensagem": "Não foi possível buscar velas"}), 404
-        
-        return jsonify({
-            "status": "sucesso", 
-            "velas": velas
-        })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/trade', methods=['POST'])
-def rota_de_trade():
-    """Executa uma operação de trade. O valor de entrada é sempre calculado como porcentagem do saldo atual, conforme informado no input HTTP."""
-    try:
-        sinal = request.get_json()
-        
-        # Validações básicas
-        if not sinal or 'ativo' not in sinal or ('acao' not in sinal and 'call' not in sinal and 'put' not in sinal) or 'duracao' not in sinal:
-            return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
-        
-        tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
-        valor_entrada_req = sinal.get('valor_entrada', 'gen')
-
-        # Seleciona a conta
-        trader.selecionar_conta(tipo_conta)
-        moeda = trader.get_moeda_conta()
-        saldo_anterior = trader.get_saldo()
-        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior} e valor de entrada solicitado: {valor_entrada_req}")
-        
-        # Validação de saldo
-        if saldo_anterior <= 0:
-            return jsonify({
-                "status": "erro", 
-                "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: {moeda} {saldo_anterior}"
-            }), 400
-        
-        # Define valor do investimento
-        valor_investido = None
-        if isinstance(valor_entrada_req, (int, float)):
-            # Interpreta como porcentagem do saldo
-            valor_investido = round(saldo_anterior * (float(valor_entrada_req) / 100), 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            if valor_investido > saldo_anterior:
-                logging.warning(f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})")
-                return jsonify({
-                    "status": "erro", 
-                    "mensagem": f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})"
-                }), 400
-        elif valor_entrada_req == 'gen':
-            # Por padrão, usa 10% do saldo
-            valor_investido = round(saldo_anterior * 0.10, 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            logging.info(f"Valor de entrada padrão (10% do saldo): {valor_investido}")
-        else:
-            logging.warning(f"Valor de entrada inválido recebido: {valor_entrada_req}")
-            return jsonify({"status": "erro", "mensagem": "Valor de entrada inválido."}), 400
-
-        # Determina a ação (call/put)
-        acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
-        if acao not in ['call', 'put']:
-            return jsonify({"status": "erro", "mensagem": "Ação deve ser 'call' ou 'put'"}), 400
-        
-        # Executa a ordem
-        check, order_id = trader.comprar_ativo(
-            sinal['ativo'], valor_investido, acao, int(sinal['duracao'])
-        )
-        
-        if not check:
-            return jsonify({"status": "erro", "mensagem": "Ordem rejeitada em Binária e Digital"}), 500
-
-        # Atualiza gerenciamento após trade
-        if acao in ['call', 'put']:
-            resultado = sinal.get('resultado')
-            if resultado in ['win', 'lose']:
-                gerenciador_multi.processar_resultado(tipo_conta, resultado, saldo_anterior)
-                estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-                winrate = estado.get('winrate', 0)
-                logging.info(f"[{tipo_conta.upper()}] {resultado.capitalize()}! Winrate: {winrate:.2f}%")
-        # Retorna resposta instantânea com informações do trade
+def get_balance():
+    """Retorna o saldo da conta."""
+    if trader and trader.is_connected():
         return jsonify({
             "status": "sucesso",
-            "mensagem": "Trade executado com sucesso!",
-            "trade_info": {
-                "ativo": sinal['ativo'],
-                "acao": acao,
-                "duracao": sinal['duracao'],
-                "tipo_conta": tipo_conta,
-                "valor_investido": valor_investido,
-                "saldo_anterior": saldo_anterior,
-                "order_id": order_id
-            },
-            "saldo_atual": saldo_anterior,
-            "conta": tipo_conta.upper()
+            "balance": trader.get_balance()
         })
-    except Exception as e:
-        logging.error(f"Erro na rota /trade: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+    return jsonify({"status": "erro", "mensagem": "Trader não conectado"}), 503
 
-@app.route('/get_historico_trades', methods=['GET'])
-@app.route('/history', methods=['GET'])
-def rota_get_historico():
-    """Busca histórico de trades."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', None)
-        historico = database.get_historico_trades(db_conn, tipo_conta)
-        
-        # Converte campos NUMERIC para float
-        for trade in historico:
-            for key, value in trade.items():
-                if isinstance(value, decimal.Decimal):
-                    trade[key] = float(value)
-        
-        return jsonify({
-            "status": "sucesso", 
-            "historico": historico
-        })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/get_estado_gerenciador', methods=['GET'])
-@app.route('/management', methods=['GET'])
-def rota_get_estado_gerenciador():
-    """Consulta estado do gerenciador (apenas wins/losses e winrate, sem entradas por nível)."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        banca_atual = trader.get_saldo()
-        gerenciador_multi._get_gerenciador(tipo_conta, banca_atual)  # Garante que existe
-        estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-        if estado:
-            return jsonify({"status": "sucesso", "estado": estado})
-        else:
-            return jsonify({
-                "status": "sucesso", 
-                "estado": {
-                    "total_wins": 0,
-                    "total_losses": 0,
-                    "nivel_atual": 1,
-                    "winrate": 0.0
-                }
-            })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/resetar_historico', methods=['POST'])
-@app.route('/management/reset', methods=['POST'])
-def rota_resetar_historico():
-    """Reseta histórico de trades."""
-    try:
-        dados = request.get_json() or {}
-        tipo_conta = dados.get('tipo_conta', None)
-        
-        # Limpa tabelas
-        database.resetar_historico_trades(db_conn, tipo_conta)
-        database.resetar_estado_gerenciamento(db_conn, tipo_conta)
-        
-        # Reinicia gerenciadores
-        if tipo_conta:
-            trader.selecionar_conta(tipo_conta)
-            banca_atual = trader.get_saldo()
-            gerenciador_multi.resetar_gerenciador(tipo_conta, banca_atual)
-        else:
-            for conta in ['REAL', 'PRACTICE']:
-                try:
-                    trader.selecionar_conta(conta)
-                    banca_atual = trader.get_saldo()
-                    gerenciador_multi.resetar_gerenciador(conta, banca_atual)
-                except Exception as e:
-                    logging.warning(f"Não foi possível resetar gerenciador para {conta}: {e}")
-        
-        mensagem = f"Histórico resetado para {tipo_conta if tipo_conta else 'todas as contas'}."
-        return jsonify({"status": "sucesso", "mensagem": mensagem})
-    except Exception as e:
-        logging.error(f"Erro ao resetar histórico: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/resetar_gerenciamento', methods=['POST'])
-@app.route('/management/reset_gerenciamento', methods=['POST'])
-def rota_resetar_gerenciamento():
-    """Reseta apenas o gerenciamento (tracking de wins/losses)."""
-    try:
-        dados = request.get_json() or {}
-        tipo_conta = dados.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        banca_atual = trader.get_saldo()
-        database.resetar_estado_gerenciamento(db_conn, tipo_conta)
-        gerenciador_multi.resetar_gerenciador(tipo_conta, banca_atual)
-        estado_apos_reset = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-        mensagem = f"Gerenciamento resetado para {tipo_conta}. Tracking de wins/losses zerado."
-        return jsonify({
-            "status": "sucesso", 
-            "mensagem": mensagem,
-            "dados": {
-                "tipo_conta": tipo_conta,
-                "banca_atual": banca_atual,
-                "estado_apos_reset": estado_apos_reset
-            }
-        })
-    except Exception as e:
-        logging.error(f"Erro ao resetar gerenciamento: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/ping', methods=['GET'])
-@app.route('/status', methods=['GET'])
-def rota_de_ping():
-    """Teste de conectividade."""
-    return jsonify({
-        "status": "sucesso", 
-        "mensagem": "pong"
-    })
-
-@app.route('/get_saldos', methods=['GET'])
-def rota_get_saldos():
-    """Consulta saldo de ambas as contas."""
-    try:
-        # Saldo PRACTICE
-        trader.selecionar_conta('PRACTICE')
-        saldo_practice = trader.get_saldo()
-        
-        # Saldo REAL
-        trader.selecionar_conta('REAL')
-        saldo_real = trader.get_saldo()
-        
-        return jsonify({
-            "status": "sucesso",
-            "saldos": {
-                "PRACTICE": {
-                    "saldo": saldo_practice,
-                    "disponivel": saldo_practice > 0
-                },
-                "REAL": {
-                    "saldo": saldo_real,
-                    "disponivel": saldo_real > 0
-                }
-            },
-            "mensagem": f"PRACTICE: ${saldo_practice} | REAL: ${saldo_real}"
-        })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-# --- API Status ---
-@app.route('/', methods=['GET'])
-def api_status():
-    """Status da API."""
-    return jsonify({
-        "status": "sucesso",
-        "mensagem": "Bot Trader API funcionando",
-        "endpoints": {
-            "trade": "/trade",
-            "balance": "/balance", 
-            "history": "/history",
-            "management": "/management",
-            "reset_management": "/resetar_gerenciamento",
-            "status": "/status"
-        }
-    })
-
-if __name__ == "__main__":
-    # Logar status inicial da conta REAL (apenas uma vez)
-    trader.selecionar_conta('REAL')
-    banca_real = trader.get_saldo()
-    estado_real = gerenciador_multi.get_estado_gerenciador('REAL')
+@app.route('/get_candles', methods=['GET'])
+def get_candles_route():
+    """Busca velas (candles) para um ativo específico."""
+    ativo = request.args.get('ativo', 'EURUSD-OTC')
+    timeframe = int(request.args.get('timeframe', 1))
+    quantidade = int(request.args.get('quantidade', 10))
     
-    print("\n✅ Server ligado com sucesso")
-    print(f"[Conta: REAL | Banca: ${banca_real} | Wins: {estado_real['total_wins']} | Próxima entrada MK: ${proxima_entrada}]")
-    print("Pronto pro trade!\n")
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    if trader and trader.is_connected():
+        velas = trader.get_candles(ativo, timeframe, quantidade)
+        return jsonify({
+            "status": "sucesso",
+            "ativo": ativo,
+            "data": velas
+        })
+    return jsonify({"status": "erro", "mensagem": "Trader não conectado"}), 503
+
+# --- NOVO ENDPOINT PARA GERAR GRÁFICO ---
+@app.route('/grafico', methods=['GET'])
+def rota_get_grafico():
+    """Gera e retorna uma imagem de gráfico de candlestick para um ativo."""
+    if not (trader and trader.is_connected()):
+        return jsonify({"status": "erro", "mensagem": "Trader não conectado"}), 503
+
+    try:
+        # 1. Obter parâmetros da requisição
+        ativo = request.args.get('ativo', 'EURUSD-OTC')
+        timeframe = int(request.args.get('timeframe', 1))  # Em minutos
+        quantidade = int(request.args.get('quantidade', 100))  # Número de velas
+
+        logging.info(f"Gerando gráfico para {ativo}, timeframe {timeframe}m, quantidade {quantidade}")
+
+        # 2. Buscar os dados dos candles
+        velas_raw = trader.get_candles(ativo, timeframe, quantidade)
+        if not velas_raw:
+            return jsonify({"status": "erro", "mensagem": "Não foi possível obter os dados das velas."}), 404
+
+        # 3. Processar os dados com Pandas
+        df = pd.DataFrame(velas_raw)
+        df['from'] = pd.to_datetime(df['from'], unit='s')
+        df.rename(columns={
+            'from': 'Datetime', 'open': 'Open', 'high': 'High',
+            'low': 'Low', 'close': 'Close'
+        }, inplace=True)
+        df.set_index('Datetime', inplace=True)
+
+        # 4. Gerar o gráfico com Matplotlib
+        fig, ax = plt.subplots(figsize=(12, 6), facecolor='#0d1117')
+        ax.set_facecolor('#0d1117')
+
+        # Ajusta a largura do candle com base no timeframe para melhor visualização
+        width = (df.index[1] - df.index[0]) * 0.6
+        width2 = width * 0.1
+
+        up = df[df.Close >= df.Open]
+        down = df[df.Close < df.Open]
+
+        # Cores para tema escuro
+        up_color = '#26a69a'
+        down_color = '#ef5350'
+        text_color = '#c9d1d9'
+        border_color = '#21262d'
+
+        # Plotar velas de alta e baixa
+        ax.bar(up.index, up.Close - up.Open, width, bottom=up.Open, color=up_color)
+        ax.bar(up.index, up.High - up.Close, width2, bottom=up.Close, color=up_color, align='center')
+        ax.bar(up.index, up.Low - up.Open, width2, bottom=up.Open, color=up_color, align='center')
+        ax.bar(down.index, down.Close - down.Open, width, bottom=down.Open, color=down_color)
+        ax.bar(down.index, down.High - down.Open, width2, bottom=down.Open, color=down_color, align='center')
+        ax.bar(down.index, down.Low - down.Close, width2, bottom=down.Close, color=down_color, align='center')
+
+        # Formatação e estilo
+        ax.grid(True, color=border_color, linestyle='--', linewidth=0.5)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.xticks(rotation=30, color=text_color)
+        plt.yticks(color=text_color)
+        plt.title(f'Gráfico de Candlestick - {ativo.upper()}', color=text_color, fontsize=16)
+        plt.ylabel('Preço', color=text_color, fontsize=12)
+        plt.xlabel('Horário', color=text_color, fontsize=12)
+        
+        for spine in ax.spines.values():
+            spine.set_edgecolor(border_color)
+
+        plt.tight_layout()
+
+        # 5. Salvar a imagem em um buffer de memória
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none', dpi=100)
+        buf.seek(0)
+        plt.close(fig)
+
+        # 6. Enviar a imagem como resposta
+        return send_file(buf, mimetype='image/png')
+
+    except Exception as e:
+        logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
+# --- Execução do Servidor ---
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
