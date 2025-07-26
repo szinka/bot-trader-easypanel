@@ -373,7 +373,7 @@ def rota_get_grafico():
         for col in ['Open', 'High', 'Low', 'Close']:
             if col not in df.columns:
                 return jsonify({"status": "erro", "mensagem": f"Coluna '{col}' não encontrada nos dados."}), 500
-        
+
         # Converte colunas para float para garantir compatibilidade
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in df.columns:
@@ -459,28 +459,39 @@ def rota_get_grafico():
         # Painel 1: Candlesticks e indicadores principais
         ax1 = fig.add_subplot(gs[0])
         
-        # Plota candlesticks
-        width = 0.6
-        up = df[df.Close >= df.Open]
-        down = df[df.Close < df.Open]
-        
-        # Velas de alta (verde)
-        if not up.empty:
-            ax1.bar(up.index, up.Close - up.Open, width, bottom=up.Open, 
-                   color=colors['up'], alpha=0.8, edgecolor=colors['up'])
-            ax1.bar(up.index, up.High - up.Close, 0.1, bottom=up.Close, 
-                   color=colors['up'], alpha=0.8)
-            ax1.bar(up.index, up.Low - up.Open, 0.1, bottom=up.Open, 
-                   color=colors['up'], alpha=0.8)
-        
-        # Velas de baixa (vermelho)
-        if not down.empty:
-            ax1.bar(down.index, down.Close - down.Open, width, bottom=down.Open, 
-                   color=colors['down'], alpha=0.8, edgecolor=colors['down'])
-            ax1.bar(down.index, down.High - down.Open, 0.1, bottom=down.Open, 
-                   color=colors['down'], alpha=0.8)
-            ax1.bar(down.index, down.Low - down.Close, 0.1, bottom=down.Close, 
-                   color=colors['down'], alpha=0.8)
+        # Plota candlesticks usando linhas verticais e horizontais
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção da vela
+            if row['Close'] >= row['Open']:
+                color = colors['up']
+            else:
+                color = colors['down']
+            
+            # Desenha a linha vertical (mecha)
+            ax1.plot([idx, idx], [row['Low'], row['High']], color=color, linewidth=1)
+            
+            # Desenha o corpo da vela
+            body_height = abs(row['Close'] - row['Open'])
+            if body_height > 0:
+                # Corpo da vela como retângulo
+                if row['Close'] >= row['Open']:
+                    # Vela de alta (verde)
+                    ax1.add_patch(plt.Rectangle(
+                        (idx - width/2, row['Open']), 
+                        width, body_height,
+                        facecolor=color, edgecolor=color, alpha=0.8
+                    ))
+                else:
+                    # Vela de baixa (vermelha)
+                    ax1.add_patch(plt.Rectangle(
+                        (idx - width/2, row['Close']), 
+                        width, body_height,
+                        facecolor=color, edgecolor=color, alpha=0.8
+                    ))
+            else:
+                # Doji - apenas linha horizontal
+                ax1.plot([idx - width/2, idx + width/2], [row['Open'], row['Open']], 
+                        color=color, linewidth=2)
         
         # Médias móveis
         ax1.plot(df.index, df['SMA_9'], color=colors['sma9'], linewidth=1.5, 
@@ -519,15 +530,22 @@ def rota_get_grafico():
         # Painel 2: Volume
         ax2 = fig.add_subplot(gs[1], sharex=ax1)
         
-        # Volume colorido
-        volume_colors = []
-        for i in range(len(df)):
-            if df['Close'].iloc[i] >= df['Open'].iloc[i]:
-                volume_colors.append(colors['volume_up'])
+        # Volume como barras normais
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção do preço
+            if row['Close'] >= row['Open']:
+                color = colors['volume_up']
             else:
-                volume_colors.append(colors['volume_down'])
+                color = colors['volume_down']
+            
+            # Desenha barra de volume
+            if row['Volume'] > 0:
+                ax2.add_patch(plt.Rectangle(
+                    (idx - 0.3, 0), 
+                    0.6, row['Volume'],
+                    facecolor=color, edgecolor=color, alpha=0.7
+                ))
         
-        ax2.bar(df.index, df['Volume'], color=volume_colors, alpha=0.7, width=0.8)
         ax2.set_ylabel('Volume', color=colors['text'], fontsize=10)
         ax2.set_facecolor(colors['background'])
         ax2.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
@@ -775,28 +793,39 @@ def rota_grafico_dados():
         # Painel 1: Candlesticks e indicadores principais
         ax1 = fig.add_subplot(gs[0])
         
-        # Plota candlesticks
-        width = 0.6
-        up = df[df.Close >= df.Open]
-        down = df[df.Close < df.Open]
-        
-        # Velas de alta (verde)
-        if not up.empty:
-            ax1.bar(up.index, up.Close - up.Open, width, bottom=up.Open, 
-                   color=colors['up'], alpha=0.8, edgecolor=colors['up'])
-            ax1.bar(up.index, up.High - up.Close, 0.1, bottom=up.Close, 
-                   color=colors['up'], alpha=0.8)
-            ax1.bar(up.index, up.Low - up.Open, 0.1, bottom=up.Open, 
-                   color=colors['up'], alpha=0.8)
-        
-        # Velas de baixa (vermelho)
-        if not down.empty:
-            ax1.bar(down.index, down.Close - down.Open, width, bottom=down.Open, 
-                   color=colors['down'], alpha=0.8, edgecolor=colors['down'])
-            ax1.bar(down.index, down.High - down.Open, 0.1, bottom=down.Open, 
-                   color=colors['down'], alpha=0.8)
-            ax1.bar(down.index, down.Low - down.Close, 0.1, bottom=down.Close, 
-                   color=colors['down'], alpha=0.8)
+        # Plota candlesticks usando linhas verticais e horizontais
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção da vela
+            if row['Close'] >= row['Open']:
+                color = colors['up']
+            else:
+                color = colors['down']
+            
+            # Desenha a linha vertical (mecha)
+            ax1.plot([idx, idx], [row['Low'], row['High']], color=color, linewidth=1)
+            
+            # Desenha o corpo da vela
+            body_height = abs(row['Close'] - row['Open'])
+            if body_height > 0:
+                # Corpo da vela como retângulo
+                if row['Close'] >= row['Open']:
+                    # Vela de alta (verde)
+                    ax1.add_patch(plt.Rectangle(
+                        (idx - width/2, row['Open']), 
+                        width, body_height,
+                        facecolor=color, edgecolor=color, alpha=0.8
+                    ))
+                else:
+                    # Vela de baixa (vermelha)
+                    ax1.add_patch(plt.Rectangle(
+                        (idx - width/2, row['Close']), 
+                        width, body_height,
+                        facecolor=color, edgecolor=color, alpha=0.8
+                    ))
+            else:
+                # Doji - apenas linha horizontal
+                ax1.plot([idx - width/2, idx + width/2], [row['Open'], row['Open']], 
+                        color=color, linewidth=2)
         
         # Médias móveis
         ax1.plot(df.index, df['SMA_9'], color=colors['sma9'], linewidth=1.5, 
@@ -835,15 +864,21 @@ def rota_grafico_dados():
         # Painel 2: Volume
         ax2 = fig.add_subplot(gs[1], sharex=ax1)
         
-        # Volume colorido
-        volume_colors = []
-        for i in range(len(df)):
-            if df['Close'].iloc[i] >= df['Open'].iloc[i]:
-                volume_colors.append(colors['volume_up'])
+        # Volume como barras normais
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção do preço
+            if row['Close'] >= row['Open']:
+                color = colors['volume_up']
             else:
-                volume_colors.append(colors['volume_down'])
-        
-        ax2.bar(df.index, df['Volume'], color=volume_colors, alpha=0.7, width=0.8)
+                color = colors['volume_down']
+            
+            # Desenha barra de volume
+            if row['Volume'] > 0:
+                ax2.add_patch(plt.Rectangle(
+                    (idx - 0.3, 0), 
+                    0.6, row['Volume'],
+                    facecolor=color, edgecolor=color, alpha=0.7
+                ))
         ax2.set_ylabel('Volume', color=colors['text'], fontsize=10)
         ax2.set_facecolor(colors['background'])
         ax2.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
