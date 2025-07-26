@@ -790,6 +790,9 @@ def rota_grafico_dados():
         # Layout: 5 painéis organizados
         gs = fig.add_gridspec(5, 1, height_ratios=[3, 1, 1, 1, 1], hspace=0.05)
 
+        # Define largura das velas
+        width = 0.6
+
         # Painel 1: Candlesticks e indicadores principais
         ax1 = fig.add_subplot(gs[0])
         
