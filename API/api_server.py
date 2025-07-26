@@ -323,7 +323,7 @@ def rota_get_saldos():
 # --- Endpoint para gerar gráfico de candlestick ---
 @app.route('/grafico', methods=['GET'])
 def rota_get_grafico():
-    """Gera e retorna uma imagem de gráfico de candlestick para um ativo com visual TradingView."""
+    """Gera e retorna uma imagem de gráfico de candlestick para um ativo com visual TradingView profissional."""
     try:
         import matplotlib
         matplotlib.use('Agg')  # Modo headless
@@ -385,21 +385,49 @@ def rota_get_grafico():
         if df.empty:
             return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
 
-        # Calcula indicadores
+        # Calcula indicadores técnicos avançados
         df['SMA_9'] = df['Close'].rolling(window=9).mean()
         df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
         
-        # Calcula MACD
+        # Bollinger Bands
+        df['BB_20'] = df['Close'].rolling(window=20).mean()
+        df['BB_upper'] = df['BB_20'] + (df['Close'].rolling(window=20).std() * 2)
+        df['BB_lower'] = df['BB_20'] - (df['Close'].rolling(window=20).std() * 2)
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # MACD
         exp12 = df['Close'].ewm(span=12, adjust=False).mean()
         exp26 = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD'] = exp12 - exp26
         df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
         df['MACD_Hist'] = df['MACD'] - df['Signal']
-
-        # Cria figura com subplots
-        fig = plt.figure(figsize=(14, 10), facecolor='#0d1117')
         
-        # Define cores TradingView
+        # Stochastic
+        df['Stoch_K'] = ((df['Close'] - df['Low'].rolling(window=14).min()) / 
+                         (df['High'].rolling(window=14).max() - df['Low'].rolling(window=14).min())) * 100
+        df['Stoch_D'] = df['Stoch_K'].rolling(window=3).mean()
+        
+        # ATR (Average True Range)
+        df['TR'] = np.maximum(
+            df['High'] - df['Low'],
+            np.maximum(
+                abs(df['High'] - df['Close'].shift(1)),
+                abs(df['Low'] - df['Close'].shift(1))
+            )
+        )
+        df['ATR'] = df['TR'].rolling(window=14).mean()
+
+        # Cria figura com layout profissional
+        fig = plt.figure(figsize=(16, 12), facecolor='#0d1117')
+        
+        # Define cores TradingView profissionais
         colors = {
             'background': '#0d1117',
             'grid': '#1f2937',
@@ -409,8 +437,14 @@ def rota_get_grafico():
             'down': '#ff5252',
             'sma9': '#ff9800',
             'sma20': '#2196f3',
+            'sma50': '#9c27b0',
+            'bb_upper': '#ff5722',
+            'bb_lower': '#ff5722',
+            'bb_middle': '#ff9800',
+            'rsi': '#00bcd4',
             'macd': '#00bcd4',
             'signal': '#ff5722',
+            'stoch': '#ff9800',
             'volume_up': '#00c853',
             'volume_down': '#ff5252'
         }
@@ -419,8 +453,11 @@ def rota_get_grafico():
         plt.rcParams['font.size'] = 10
         plt.rcParams['font.family'] = 'DejaVu Sans'
 
-        # Subplot 1: Candlesticks e médias móveis
-        ax1 = plt.subplot2grid((4, 1), (0, 0), rowspan=2, colspan=1, facecolor=colors['background'])
+        # Layout: 5 painéis organizados
+        gs = fig.add_gridspec(5, 1, height_ratios=[3, 1, 1, 1, 1], hspace=0.05)
+
+        # Painel 1: Candlesticks e indicadores principais
+        ax1 = fig.add_subplot(gs[0])
         
         # Plota candlesticks
         width = 0.6
@@ -450,14 +487,24 @@ def rota_get_grafico():
                 label='SMA 9', alpha=0.8)
         ax1.plot(df.index, df['SMA_20'], color=colors['sma20'], linewidth=1.5, 
                 label='SMA 20', alpha=0.8)
+        ax1.plot(df.index, df['SMA_50'], color=colors['sma50'], linewidth=1.5, 
+                label='SMA 50', alpha=0.8)
+        
+        # Bollinger Bands
+        ax1.plot(df.index, df['BB_upper'], color=colors['bb_upper'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Upper')
+        ax1.plot(df.index, df['BB_lower'], color=colors['bb_lower'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Lower')
+        ax1.plot(df.index, df['BB_20'], color=colors['bb_middle'], linewidth=1, 
+                alpha=0.6, label='BB Middle')
         
         # Configuração do gráfico principal
         ax1.set_facecolor(colors['background'])
         ax1.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax1.set_title(f'{ativo.upper()} - {timeframe}min', color=colors['text'], 
-                     fontsize=14, fontweight='bold', pad=20)
+        ax1.set_title(f'{ativo.upper()} - {timeframe}min - Análise Técnica Completa', 
+                     color=colors['text'], fontsize=14, fontweight='bold', pad=20)
         ax1.set_ylabel('Preço', color=colors['text'], fontsize=12)
-        ax1.legend(loc='upper left', frameon=False, fontsize=10)
+        ax1.legend(loc='upper left', frameon=False, fontsize=9, ncol=3)
         
         # Remove bordas
         for spine in ax1.spines.values():
@@ -469,9 +516,8 @@ def rota_get_grafico():
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
 
-        # Subplot 2: Volume
-        ax2 = plt.subplot2grid((4, 1), (2, 0), rowspan=1, colspan=1, 
-                               facecolor=colors['background'], sharex=ax1)
+        # Painel 2: Volume
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
         
         # Volume colorido
         volume_colors = []
@@ -494,13 +540,34 @@ def rota_get_grafico():
         ax2.tick_params(colors=colors['text'], labelsize=9)
         ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
 
-        # Subplot 3: MACD
-        ax3 = plt.subplot2grid((4, 1), (3, 0), rowspan=1, colspan=1, 
-                               facecolor=colors['background'], sharex=ax1)
+        # Painel 3: RSI
+        ax3 = fig.add_subplot(gs[2], sharex=ax1)
         
-        # MACD
-        ax3.plot(df.index, df['MACD'], color=colors['macd'], linewidth=1.5, label='MACD')
-        ax3.plot(df.index, df['Signal'], color=colors['signal'], linewidth=1.5, label='Signal')
+        ax3.plot(df.index, df['RSI'], color=colors['rsi'], linewidth=1.5, label='RSI')
+        ax3.axhline(y=70, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
+        ax3.axhline(y=30, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
+        ax3.fill_between(df.index, 70, 100, alpha=0.1, color='red')
+        ax3.fill_between(df.index, 0, 30, alpha=0.1, color='green')
+        
+        ax3.set_ylabel('RSI', color=colors['text'], fontsize=10)
+        ax3.set_ylim(0, 100)
+        ax3.set_facecolor(colors['background'])
+        ax3.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax3.legend(loc='upper left', frameon=False, fontsize=8)
+        
+        # Remove bordas do RSI
+        for spine in ax3.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax3.tick_params(colors=colors['text'], labelsize=9)
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 4: MACD
+        ax4 = fig.add_subplot(gs[3], sharex=ax1)
+        
+        ax4.plot(df.index, df['MACD'], color=colors['macd'], linewidth=1.5, label='MACD')
+        ax4.plot(df.index, df['Signal'], color=colors['signal'], linewidth=1.5, label='Signal')
         
         # Histograma MACD
         macd_colors = []
@@ -510,24 +577,48 @@ def rota_get_grafico():
             else:
                 macd_colors.append(colors['down'])
         
-        ax3.bar(df.index, df['MACD_Hist'], color=macd_colors, alpha=0.6, width=0.8)
+        ax4.bar(df.index, df['MACD_Hist'], color=macd_colors, alpha=0.6, width=0.8)
         
         # Linha zero
-        ax3.axhline(y=0, color=colors['text'], linestyle='-', linewidth=0.5, alpha=0.5)
+        ax4.axhline(y=0, color=colors['text'], linestyle='-', linewidth=0.5, alpha=0.5)
         
-        ax3.set_ylabel('MACD', color=colors['text'], fontsize=10)
-        ax3.set_xlabel('Horário', color=colors['text'], fontsize=10)
-        ax3.set_facecolor(colors['background'])
-        ax3.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax3.legend(loc='upper left', frameon=False, fontsize=9)
+        ax4.set_ylabel('MACD', color=colors['text'], fontsize=10)
+        ax4.set_facecolor(colors['background'])
+        ax4.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax4.legend(loc='upper left', frameon=False, fontsize=8)
         
         # Remove bordas do MACD
-        for spine in ax3.spines.values():
+        for spine in ax4.spines.values():
             spine.set_color(colors['border'])
             spine.set_linewidth(0.5)
         
-        ax3.tick_params(colors=colors['text'], labelsize=9)
-        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax4.tick_params(colors=colors['text'], labelsize=9)
+        ax4.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 5: Stochastic
+        ax5 = fig.add_subplot(gs[4], sharex=ax1)
+        
+        ax5.plot(df.index, df['Stoch_K'], color=colors['stoch'], linewidth=1.5, label='%K')
+        ax5.plot(df.index, df['Stoch_D'], color=colors['signal'], linewidth=1.5, label='%D')
+        ax5.axhline(y=80, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
+        ax5.axhline(y=20, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
+        ax5.fill_between(df.index, 80, 100, alpha=0.1, color='red')
+        ax5.fill_between(df.index, 0, 20, alpha=0.1, color='green')
+        
+        ax5.set_ylabel('Stoch', color=colors['text'], fontsize=10)
+        ax5.set_xlabel('Horário', color=colors['text'], fontsize=10)
+        ax5.set_ylim(0, 100)
+        ax5.set_facecolor(colors['background'])
+        ax5.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax5.legend(loc='upper left', frameon=False, fontsize=8)
+        
+        # Remove bordas do Stochastic
+        for spine in ax5.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax5.tick_params(colors=colors['text'], labelsize=9)
+        ax5.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
 
         # Ajusta layout
         plt.tight_layout()
