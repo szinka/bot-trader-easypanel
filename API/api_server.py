@@ -717,7 +717,7 @@ def rota_grafico_dados():
         # Usa o novo gerador de gráficos
         chart_generator = ChartGenerator(theme='dark')
         img_bytes = chart_generator.create_candlestick_chart(
-            df, 
+            df,
             title="Análise Técnica Completa - Dados Fornecidos"
         )
         

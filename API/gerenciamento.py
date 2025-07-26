@@ -37,7 +37,7 @@ class GerenciamentoNiveis:
         # Encontra o nível correspondente à banca atual
         for (min_banca, max_banca), valor_entrada in self.niveis_entrada.items():
             if min_banca <= banca_atual < max_banca:
-                return round(valor_entrada, 2)
+        return round(valor_entrada, 2)
         
         # Fallback para valores muito altos
         return 1500.0
