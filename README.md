@@ -346,7 +346,7 @@ O bot está pronto para receber sinais via API. Envie POST para `/trade` com:
 - `acao`: "call" ou "put"
 - `duracao`: 1, 5, 15 minutos
 - `tipo_conta`: "PRACTICE" ou "REAL"
-- `valor_entrada`: valor específico ou "gen" para gerenciamento automático
+- Sistema de níveis automático baseado na banca atual
 
 ## 💰 Gerenciamento de Risco - Torre MK
 
@@ -403,12 +403,34 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 
 ## NOVA LÓGICA DE GERENCIAMENTO DE ENTRADA
 
-Agora, o valor de entrada para cada operação é sempre calculado como uma porcentagem do saldo atual da conta (REAL ou PRACTICE), conforme informado no campo `valor_entrada` do input HTTP.
+Agora, o valor de entrada para cada operação é calculado automaticamente pelo sistema de níveis baseado na banca atual da conta (REAL ou PRACTICE).
 
-- Se você enviar `"valor_entrada": 10`, a operação usará 10% do saldo atual.
-- Se não informar, será usado o padrão de 10% do saldo.
-- O valor mínimo de entrada é R$ 2,00.
-- O gerenciamento por nível não influencia mais o valor da operação.
+### **📊 Sistema de Níveis Automático**
+
+O sistema calcula automaticamente a entrada baseada nos seguintes ranges de banca:
+
+- **0 até 30** = R$ 2,00
+- **30~45** = R$ 3,00  
+- **45~60** = R$ 4,50
+- **60~90** = R$ 6,00
+- **90~120** = R$ 9,00
+- **120~170** = R$ 12,00
+- **170~230** = R$ 17,00
+- **230~300** = R$ 23,00
+- **300~450** = R$ 30,00
+- **450~600** = R$ 45,00
+- **600~900** = R$ 60,00
+- **900~1200** = R$ 90,00
+- **1200~1700** = R$ 120,00
+- **1700~2300** = R$ 170,00
+- **2300~3000** = R$ 230,00
+- **3000~4500** = R$ 300,00
+- **4500~6000** = R$ 300,00
+- **6000~9000** = R$ 400,00
+- **9000~12000** = R$ 600,00
+- **12000~17000** = R$ 900,00
+- **17000~23000** = R$ 1200,00
+- **23000+** = R$ 1500,00
 
 **Exemplo de requisição:**
 
@@ -417,12 +439,11 @@ Agora, o valor de entrada para cada operação é sempre calculado como uma porc
   "ativo": "EURUSD",
   "acao": "call",
   "duracao": 5,
-  "tipo_conta": "REAL",
-  "valor_entrada": 15
+  "tipo_conta": "REAL"
 }
 ```
 
-Esse exemplo fará uma operação usando 15% do saldo da conta REAL.
+O sistema automaticamente calculará a entrada baseada na banca atual da conta REAL.
 
 ## 🐳 Deploy com EasyPanel
 
@@ -492,7 +513,7 @@ curl http://localhost:8080/status
 # Testar trade local
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
-  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
+  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE"}'
 
 # Testar reset do gerenciamento
 curl -X POST http://localhost:8080/resetar_gerenciamento \
@@ -563,7 +584,7 @@ curl http://localhost:8080/management?tipo_conta=PRACTICE
 # 4. Teste de trade
 curl -X POST http://localhost:8080/trade \
   -H "Content-Type: application/json" \
-  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
+  -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE"}'
 
 # 5. Reset do gerenciamento
 curl -X POST http://localhost:8080/resetar_gerenciamento \

@@ -76,8 +76,7 @@ def test_all_endpoints():
                 "ativo": "EURUSD-OTC",
                 "acao": "call",
                 "duracao": 5,
-                "tipo_conta": "PRACTICE",
-                "valor_entrada": 1
+                "tipo_conta": "PRACTICE"
             }
             resp = requests.post(f"{base_url}/trade", json=payload)
             results.append({

@@ -86,12 +86,27 @@ class Trader:
         return self.api.get_balance()
 
     def get_candles(self, ativo, timeframe, quantidade):
-        """Busca candles do ativo na conta selecionada."""
+        """Busca candles do ativo na conta selecionada com volume."""
         if not self.api:
             return None
         try:
             candles = self.api.get_candles(ativo, timeframe * 60, quantidade, time.time())
-            return candles
+            
+            # Processa os candles para garantir que o volume seja incluído
+            processed_candles = []
+            for candle in candles:
+                processed_candle = {
+                    'from': candle.get('from', 0),
+                    'open': candle.get('open', 0),
+                    'high': candle.get('high', 0),
+                    'low': candle.get('low', 0),
+                    'close': candle.get('close', 0),
+                    'volume': candle.get('volume', 0)  # Garante que volume seja incluído
+                }
+                processed_candles.append(processed_candle)
+            
+            logging.info(f"Retornando {len(processed_candles)} candles para {ativo} com volume")
+            return processed_candles
         except Exception as e:
             logging.error(f"Erro ao buscar candles: {e}")
             return None

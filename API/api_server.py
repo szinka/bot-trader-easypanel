@@ -110,7 +110,7 @@ def rota_get_candles():
 
 @app.route('/trade', methods=['POST'])
 def rota_de_trade():
-    """Executa uma operação de trade. O valor de entrada é sempre calculado como porcentagem do saldo atual, conforme informado no input HTTP."""
+    """Executa uma operação de trade. O valor de entrada é calculado automaticamente pelo sistema de níveis baseado na banca atual."""
     try:
         sinal = request.get_json()
         
@@ -119,13 +119,12 @@ def rota_de_trade():
             return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
-        valor_entrada_req = sinal.get('valor_entrada', 'gen')
 
         # Seleciona a conta
         trader.selecionar_conta(tipo_conta)
         moeda = trader.get_moeda_conta()
         saldo_anterior = trader.get_saldo()
-        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior} e valor de entrada solicitado: {valor_entrada_req}")
+        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior}")
         
         # Validação de saldo
         if saldo_anterior <= 0:
@@ -134,28 +133,9 @@ def rota_de_trade():
                 "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: {moeda} {saldo_anterior}"
             }), 400
         
-        # Define valor do investimento
-        valor_investido = None
-        if isinstance(valor_entrada_req, (int, float)):
-            # Interpreta como porcentagem do saldo
-            valor_investido = round(saldo_anterior * (float(valor_entrada_req) / 100), 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            if valor_investido > saldo_anterior:
-                logging.warning(f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})")
-                return jsonify({
-                    "status": "erro", 
-                    "mensagem": f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})"
-                }), 400
-        elif valor_entrada_req == 'gen':
-            # Por padrão, usa 10% do saldo
-            valor_investido = round(saldo_anterior * 0.10, 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            logging.info(f"Valor de entrada padrão (10% do saldo): {valor_investido}")
-        else:
-            logging.warning(f"Valor de entrada inválido recebido: {valor_entrada_req}")
-            return jsonify({"status": "erro", "mensagem": "Valor de entrada inválido."}), 400
+        # Calcula valor do investimento usando o sistema de níveis
+        valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior)
+        logging.info(f"Valor de entrada calculado pelo sistema de níveis: {valor_investido}")
 
         # Determina a ação (call/put)
         acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
@@ -343,13 +323,15 @@ def rota_get_saldos():
 # --- Endpoint para gerar gráfico de candlestick ---
 @app.route('/grafico', methods=['GET'])
 def rota_get_grafico():
-    """Gera e retorna uma imagem de gráfico de candlestick para um ativo."""
+    """Gera e retorna uma imagem de gráfico de candlestick para um ativo com visual TradingView."""
     try:
         import matplotlib
         matplotlib.use('Agg')  # Modo headless
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         import pandas as pd
+        import numpy as np
+        import io
 
         # Parâmetros da requisição
         ativo = request.args.get('ativo', 'EURUSD-OTC')
@@ -363,6 +345,7 @@ def rota_get_grafico():
 
         # Processa os dados
         df = pd.DataFrame(velas)
+        
         # Força o rename para garantir as colunas corretas
         rename_map = {}
         for col in df.columns:
@@ -376,47 +359,178 @@ def rota_get_grafico():
                 rename_map[col] = 'Low'
             elif col.lower() == 'close':
                 rename_map[col] = 'Close'
+            elif col.lower() == 'volume':
+                rename_map[col] = 'Volume'
         df.rename(columns=rename_map, inplace=True)
         df['Datetime'] = pd.to_datetime(df['Datetime'], unit='s')
         df.set_index('Datetime', inplace=True)
+
+        # Garante que Volume existe
+        if 'Volume' not in df.columns:
+            df['Volume'] = 0.0
 
         # Verifica se todas as colunas necessárias existem
         for col in ['Open', 'High', 'Low', 'Close']:
             if col not in df.columns:
                 return jsonify({"status": "erro", "mensagem": f"Coluna '{col}' não encontrada nos dados."}), 500
 
-        # Gera o gráfico
-        fig, ax = plt.subplots(figsize=(12, 6), facecolor='#0d1117')
-        ax.set_facecolor('#0d1117')
-        width = (df.index[1] - df.index[0]).total_seconds() / 60 * 0.6
-        width2 = width * 0.1
+        # Calcula indicadores
+        df['SMA_9'] = df['Close'].rolling(window=9).mean()
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        
+        # Calcula MACD
+        exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp12 - exp26
+        df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_Hist'] = df['MACD'] - df['Signal']
+
+        # Cria figura com subplots
+        fig = plt.figure(figsize=(14, 10), facecolor='#0d1117')
+        
+        # Define cores TradingView
+        colors = {
+            'background': '#0d1117',
+            'grid': '#1f2937',
+            'text': '#e5e7eb',
+            'border': '#374151',
+            'up': '#00c853',
+            'down': '#ff5252',
+            'sma9': '#ff9800',
+            'sma20': '#2196f3',
+            'macd': '#00bcd4',
+            'signal': '#ff5722',
+            'volume_up': '#00c853',
+            'volume_down': '#ff5252'
+        }
+
+        # Configuração geral
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+
+        # Subplot 1: Candlesticks e médias móveis
+        ax1 = plt.subplot2grid((4, 1), (0, 0), rowspan=2, colspan=1, facecolor=colors['background'])
+        
+        # Plota candlesticks
+        width = 0.6
         up = df[df.Close >= df.Open]
         down = df[df.Close < df.Open]
-        up_color = '#26a69a'
-        down_color = '#ef5350'
-        text_color = '#c9d1d9'
-        border_color = '#21262d'
-        ax.bar(up.index, up.Close - up.Open, width, bottom=up.Open, color=up_color)
-        ax.bar(up.index, up.High - up.Close, width2, bottom=up.Close, color=up_color, align='center')
-        ax.bar(up.index, up.Low - up.Open, width2, bottom=up.Open, color=up_color, align='center')
-        ax.bar(down.index, down.Close - down.Open, width, bottom=down.Open, color=down_color)
-        ax.bar(down.index, down.High - down.Open, width2, bottom=down.Open, color=down_color, align='center')
-        ax.bar(down.index, down.Low - down.Close, width2, bottom=down.Close, color=down_color, align='center')
-        ax.grid(True, color=border_color, linestyle='--', linewidth=0.5)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        plt.xticks(rotation=30, color=text_color)
-        plt.yticks(color=text_color)
-        plt.title(f'Gráfico de Candlestick - {ativo.upper()}', color=text_color, fontsize=16)
-        plt.ylabel('Preço', color=text_color, fontsize=12)
-        plt.xlabel('Horário', color=text_color, fontsize=12)
-        for spine in ax.spines.values():
-            spine.set_edgecolor(border_color)
+        
+        # Velas de alta (verde)
+        if not up.empty:
+            ax1.bar(up.index, up.Close - up.Open, width, bottom=up.Open, 
+                   color=colors['up'], alpha=0.8, edgecolor=colors['up'])
+            ax1.bar(up.index, up.High - up.Close, 0.1, bottom=up.Close, 
+                   color=colors['up'], alpha=0.8)
+            ax1.bar(up.index, up.Low - up.Open, 0.1, bottom=up.Open, 
+                   color=colors['up'], alpha=0.8)
+        
+        # Velas de baixa (vermelho)
+        if not down.empty:
+            ax1.bar(down.index, down.Close - down.Open, width, bottom=down.Open, 
+                   color=colors['down'], alpha=0.8, edgecolor=colors['down'])
+            ax1.bar(down.index, down.High - down.Open, 0.1, bottom=down.Open, 
+                   color=colors['down'], alpha=0.8)
+            ax1.bar(down.index, down.Low - down.Close, 0.1, bottom=down.Close, 
+                   color=colors['down'], alpha=0.8)
+        
+        # Médias móveis
+        ax1.plot(df.index, df['SMA_9'], color=colors['sma9'], linewidth=1.5, 
+                label='SMA 9', alpha=0.8)
+        ax1.plot(df.index, df['SMA_20'], color=colors['sma20'], linewidth=1.5, 
+                label='SMA 20', alpha=0.8)
+        
+        # Configuração do gráfico principal
+        ax1.set_facecolor(colors['background'])
+        ax1.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax1.set_title(f'{ativo.upper()} - {timeframe}min', color=colors['text'], 
+                     fontsize=14, fontweight='bold', pad=20)
+        ax1.set_ylabel('Preço', color=colors['text'], fontsize=12)
+        ax1.legend(loc='upper left', frameon=False, fontsize=10)
+        
+        # Remove bordas
+        for spine in ax1.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        # Configuração dos ticks
+        ax1.tick_params(colors=colors['text'], labelsize=10)
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
+
+        # Subplot 2: Volume
+        ax2 = plt.subplot2grid((4, 1), (2, 0), rowspan=1, colspan=1, 
+                               facecolor=colors['background'], sharex=ax1)
+        
+        # Volume colorido
+        volume_colors = []
+        for i in range(len(df)):
+            if df['Close'].iloc[i] >= df['Open'].iloc[i]:
+                volume_colors.append(colors['volume_up'])
+            else:
+                volume_colors.append(colors['volume_down'])
+        
+        ax2.bar(df.index, df['Volume'], color=volume_colors, alpha=0.7, width=0.8)
+        ax2.set_ylabel('Volume', color=colors['text'], fontsize=10)
+        ax2.set_facecolor(colors['background'])
+        ax2.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        
+        # Remove bordas do volume
+        for spine in ax2.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax2.tick_params(colors=colors['text'], labelsize=9)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Subplot 3: MACD
+        ax3 = plt.subplot2grid((4, 1), (3, 0), rowspan=1, colspan=1, 
+                               facecolor=colors['background'], sharex=ax1)
+        
+        # MACD
+        ax3.plot(df.index, df['MACD'], color=colors['macd'], linewidth=1.5, label='MACD')
+        ax3.plot(df.index, df['Signal'], color=colors['signal'], linewidth=1.5, label='Signal')
+        
+        # Histograma MACD
+        macd_colors = []
+        for i in range(len(df)):
+            if df['MACD_Hist'].iloc[i] >= 0:
+                macd_colors.append(colors['up'])
+            else:
+                macd_colors.append(colors['down'])
+        
+        ax3.bar(df.index, df['MACD_Hist'], color=macd_colors, alpha=0.6, width=0.8)
+        
+        # Linha zero
+        ax3.axhline(y=0, color=colors['text'], linestyle='-', linewidth=0.5, alpha=0.5)
+        
+        ax3.set_ylabel('MACD', color=colors['text'], fontsize=10)
+        ax3.set_xlabel('Horário', color=colors['text'], fontsize=10)
+        ax3.set_facecolor(colors['background'])
+        ax3.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax3.legend(loc='upper left', frameon=False, fontsize=9)
+        
+        # Remove bordas do MACD
+        for spine in ax3.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax3.tick_params(colors=colors['text'], labelsize=9)
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Ajusta layout
         plt.tight_layout()
+        plt.subplots_adjust(hspace=0.1)
+        
+        # Salva a imagem
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none', dpi=100)
+        plt.savefig(buf, format='png', facecolor=colors['background'], 
+                   edgecolor='none', dpi=150, bbox_inches='tight')
         buf.seek(0)
         plt.close(fig)
+        
         return send_file(buf, mimetype='image/png')
+        
     except Exception as e:
         logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
@@ -424,9 +538,8 @@ def rota_get_grafico():
 @app.route('/grafico_dados', methods=['POST'])
 def rota_grafico_dados():
     """
-    Recebe dados de candles (JSON ou texto), gera e retorna uma imagem de gráfico de candlestick real (usando mplfinance).
-    Adiciona volume, média móvel (SMA 9), MACD, visualizador do preço atual e linhas de SR tocadas 2 vezes.
-    Garante robustez para volume, ordem dos candles e visualização do preço atual.
+    Recebe dados de candles (JSON ou texto) e gera gráfico com visual TradingView.
+    Inclui volume, médias móveis, MACD e indicadores técnicos.
     """
     try:
         import matplotlib
