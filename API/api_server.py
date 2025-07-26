@@ -373,6 +373,17 @@ def rota_get_grafico():
         for col in ['Open', 'High', 'Low', 'Close']:
             if col not in df.columns:
                 return jsonify({"status": "erro", "mensagem": f"Coluna '{col}' não encontrada nos dados."}), 500
+        
+        # Converte colunas para float para garantir compatibilidade
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Remove linhas com dados inválidos
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
+        
+        if df.empty:
+            return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
 
         # Calcula indicadores
         df['SMA_9'] = df['Close'].rolling(window=9).mean()
@@ -587,6 +598,18 @@ def rota_grafico_dados():
         # --- Garante que a coluna Volume sempre exista e está na ordem correta ---
         if 'Volume' not in df.columns:
             df['Volume'] = 0.0
+        
+        # Converte colunas para float para garantir compatibilidade
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Remove linhas com dados inválidos
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
+        
+        if df.empty:
+            return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
+        
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
 
         # --- Média móvel de 9 períodos ---
