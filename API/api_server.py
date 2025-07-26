@@ -678,7 +678,11 @@ def rota_grafico_dados():
             # Ordena do mais antigo para o mais recente
             candles.sort(key=lambda c: pd.to_datetime(c['data']))
             df = pd.DataFrame(candles)
+            
+            # Converte timestamp para datetime
             df['data'] = pd.to_datetime(df['data'])
+            
+            # Renomeia colunas
             df.rename(columns={
                 'abertura': 'Open',
                 'fechamento': 'Close',
@@ -686,6 +690,23 @@ def rota_grafico_dados():
                 'minima': 'Low',
                 'volume': 'Volume'
             }, inplace=True)
+            
+            # Converte colunas numéricas para float ANTES de setar o índice
+            for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # Garante que Volume existe
+            if 'Volume' not in df.columns:
+                df['Volume'] = 0.0
+            
+            # Remove linhas com dados inválidos ANTES de setar o índice
+            df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
+            
+            if df.empty:
+                return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
+            
+            # Seta o índice por último
             df.set_index('data', inplace=True)
         else:
             texto = request.data.decode('utf-8')
@@ -704,16 +725,16 @@ def rota_grafico_dados():
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
-        # --- Garante que a coluna Volume sempre exista ---
+        # --- Garante que a coluna Volume sempre exista (apenas para o else) ---
         if 'Volume' not in df.columns:
             df['Volume'] = 0.0
         
-        # Converte colunas para float para garantir compatibilidade
+        # Converte colunas para float para garantir compatibilidade (apenas para o else)
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # Remove linhas com dados inválidos
+        # Remove linhas com dados inválidos (apenas para o else)
         df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
         
         if df.empty:
