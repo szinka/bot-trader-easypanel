@@ -1,19 +1,17 @@
 """
-Gerador de gráficos financeiros usando Plotly
+Gerador de gráficos financeiros usando matplotlib
 """
 
-import plotly.graph_objects as go
-import plotly.subplots as sp
-from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pandas as pd
 import numpy as np
 import io
-import base64
 from .indicators import TechnicalIndicators
 from .themes import ChartThemes
 
 class ChartGenerator:
-    """Gerador de gráficos financeiros profissionais"""
+    """Gerador de gráficos financeiros profissionais usando matplotlib"""
     
     def __init__(self, theme='dark'):
         """Inicializa o gerador com tema especificado"""
@@ -22,7 +20,7 @@ class ChartGenerator:
     
     def create_candlestick_chart(self, df, title="Análise Técnica Completa"):
         """
-        Cria gráfico de candlestick completo com indicadores
+        Cria gráfico de candlestick completo com indicadores usando matplotlib
         
         Args:
             df: DataFrame com colunas ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -34,208 +32,143 @@ class ChartGenerator:
         # Adiciona indicadores técnicos
         df = TechnicalIndicators.add_all_indicators(df)
         
-        # Cria subplots
-        fig = make_subplots(
-            rows=5, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.05,
-            subplot_titles=('Preço', 'Volume', 'RSI', 'MACD', 'Stochastic'),
-            row_heights=[0.4, 0.15, 0.15, 0.15, 0.15]
-        )
+        # Configura matplotlib
+        plt.style.use('dark_background' if self.theme == 'dark' else 'default')
         
-        # 1. Candlesticks e indicadores principais
-        fig.add_trace(
-            go.Candlestick(
-                x=df.index,
-                open=df['Open'],
-                high=df['High'],
-                low=df['Low'],
-                close=df['Close'],
-                name='Preço',
-                increasing_line_color=self.colors['up'],
-                decreasing_line_color=self.colors['down']
-            ),
-            row=1, col=1
-        )
+        # Cria figura com subplots
+        fig, axes = plt.subplots(3, 1, figsize=(16, 12), 
+                                gridspec_kw={'height_ratios': [6, 2, 2]})
+        
+        # Painel 1: Candlesticks e indicadores
+        ax1 = axes[0]
+        
+        # Plota candlesticks
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção da vela
+            if row['Close'] >= row['Open']:
+                color = self.colors['up']
+            else:
+                color = self.colors['down']
+            
+            # Desenha a linha vertical (mecha)
+            ax1.plot([idx, idx], [row['Low'], row['High']], color=color, linewidth=1)
+            
+            # Desenha o corpo da vela
+            body_height = abs(row['Close'] - row['Open'])
+            if body_height > 0:
+                # Corpo da vela como retângulo
+                if row['Close'] >= row['Open']:
+                    # Vela de alta (verde)
+                    rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Open']), 
+                                       0.6, body_height, facecolor=color, edgecolor=color, alpha=0.8)
+                    ax1.add_patch(rect)
+                else:
+                    # Vela de baixa (vermelha)
+                    rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Close']), 
+                                       0.6, body_height, facecolor=color, edgecolor=color, alpha=0.8)
+                    ax1.add_patch(rect)
+            else:
+                # Doji - apenas linha horizontal
+                ax1.plot([mdates.date2num(idx) - 0.3, mdates.date2num(idx) + 0.3], 
+                        [row['Open'], row['Open']], color=color, linewidth=2)
         
         # Médias móveis
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['SMA_9'],
-                mode='lines',
-                name='SMA 9',
-                line=dict(color=self.colors['sma9'], width=1.5)
-            ),
-            row=1, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['SMA_20'],
-                mode='lines',
-                name='SMA 20',
-                line=dict(color=self.colors['sma20'], width=1.5)
-            ),
-            row=1, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['SMA_50'],
-                mode='lines',
-                name='SMA 50',
-                line=dict(color=self.colors['sma50'], width=1.5)
-            ),
-            row=1, col=1
-        )
+        ax1.plot(df.index, df['SMA_9'], color=self.colors['sma9'], linewidth=1.5, 
+                label='SMA 9', alpha=0.8)
+        ax1.plot(df.index, df['SMA_20'], color=self.colors['sma20'], linewidth=1.5, 
+                label='SMA 20', alpha=0.8)
+        ax1.plot(df.index, df['SMA_50'], color=self.colors['sma50'], linewidth=1.5, 
+                label='SMA 50', alpha=0.8)
         
         # Bollinger Bands
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['BB_upper'],
-                mode='lines',
-                name='BB Upper',
-                line=dict(color=self.colors['bb_upper'], width=1, dash='dash'),
-                opacity=0.6
-            ),
-            row=1, col=1
-        )
+        ax1.plot(df.index, df['BB_upper'], color=self.colors['bb_upper'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Upper')
+        ax1.plot(df.index, df['BB_lower'], color=self.colors['bb_lower'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Lower')
+        ax1.plot(df.index, df['BB_20'], color=self.colors['bb_middle'], linewidth=1, 
+                alpha=0.6, label='BB Middle')
         
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['BB_lower'],
-                mode='lines',
-                name='BB Lower',
-                line=dict(color=self.colors['bb_lower'], width=1, dash='dash'),
-                opacity=0.6,
-                fill='tonexty',
-                fillcolor='rgba(231, 76, 60, 0.1)'
-            ),
-            row=1, col=1
-        )
+        # Configuração do gráfico principal
+        ax1.set_facecolor(self.colors['background'])
+        ax1.grid(True, color=self.colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax1.set_title(title, color=self.colors['text'], fontsize=14, fontweight='bold', pad=20)
+        ax1.set_ylabel('Preço', color=self.colors['text'], fontsize=12)
+        ax1.legend(loc='upper left', frameon=False, fontsize=9, ncol=3)
         
-        # 2. Volume
-        colors_volume = [self.colors['volume_up'] if close >= open else self.colors['volume_down'] 
-                        for close, open in zip(df['Close'], df['Open'])]
+        # Remove bordas
+        for spine in ax1.spines.values():
+            spine.set_color(self.colors['border'])
+            spine.set_linewidth(0.5)
         
-        fig.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['Volume'],
-                name='Volume',
-                marker_color=colors_volume,
-                opacity=0.7
-            ),
-            row=2, col=1
-        )
+        # Configuração dos ticks
+        ax1.tick_params(colors=self.colors['text'], labelsize=10)
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
+
+        # Painel 2: Volume
+        ax2 = axes[1]
         
-        # 3. RSI
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['RSI'],
-                mode='lines',
-                name='RSI',
-                line=dict(color=self.colors['rsi'], width=1.5)
-            ),
-            row=3, col=1
-        )
+        # Volume como barras
+        for i, (idx, row) in enumerate(df.iterrows()):
+            if row['Close'] >= row['Open']:
+                color = self.colors['volume_up']
+            else:
+                color = self.colors['volume_down']
+            
+            if row['Volume'] > 0:
+                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, 0), 
+                                   0.6, row['Volume'], facecolor=color, edgecolor=color, alpha=0.7)
+                ax2.add_patch(rect)
         
-        # Linhas de referência RSI
-        fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=3, col=1)
-        fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=3, col=1)
+        ax2.set_ylabel('Volume', color=self.colors['text'], fontsize=10)
+        ax2.set_facecolor(self.colors['background'])
+        ax2.grid(True, color=self.colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
         
-        # 4. MACD
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['MACD'],
-                mode='lines',
-                name='MACD',
-                line=dict(color=self.colors['macd'], width=1.5)
-            ),
-            row=4, col=1
-        )
+        # Remove bordas do volume
+        for spine in ax2.spines.values():
+            spine.set_color(self.colors['border'])
+            spine.set_linewidth(0.5)
         
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['Signal'],
-                mode='lines',
-                name='Signal',
-                line=dict(color=self.colors['signal'], width=1.5)
-            ),
-            row=4, col=1
-        )
+        ax2.tick_params(colors=self.colors['text'], labelsize=9)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 3: RSI
+        ax3 = axes[2]
         
-        # Histograma MACD
-        colors_hist = [self.colors['histogram_up'] if h >= 0 else self.colors['histogram_down'] 
-                      for h in df['MACD_Hist']]
+        ax3.plot(df.index, df['RSI'], color=self.colors['rsi'], linewidth=1.5, label='RSI')
+        ax3.axhline(y=70, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
+        ax3.axhline(y=30, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
+        ax3.fill_between(df.index, 70, 100, alpha=0.1, color='red')
+        ax3.fill_between(df.index, 0, 30, alpha=0.1, color='green')
         
-        fig.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['MACD_Hist'],
-                name='MACD Hist',
-                marker_color=colors_hist,
-                opacity=0.7
-            ),
-            row=4, col=1
-        )
+        ax3.set_ylabel('RSI', color=self.colors['text'], fontsize=10)
+        ax3.set_ylim(0, 100)
+        ax3.set_facecolor(self.colors['background'])
+        ax3.grid(True, color=self.colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax3.legend(loc='upper left', frameon=False, fontsize=8)
         
-        # 5. Stochastic
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['Stoch_K'],
-                mode='lines',
-                name='%K',
-                line=dict(color=self.colors['stoch_k'], width=1.5)
-            ),
-            row=5, col=1
-        )
+        # Remove bordas do RSI
+        for spine in ax3.spines.values():
+            spine.set_color(self.colors['border'])
+            spine.set_linewidth(0.5)
         
-        fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df['Stoch_D'],
-                mode='lines',
-                name='%D',
-                line=dict(color=self.colors['stoch_d'], width=1.5)
-            ),
-            row=5, col=1
-        )
+        ax3.tick_params(colors=self.colors['text'], labelsize=9)
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax3.set_xlabel('Horário', color=self.colors['text'], fontsize=12)
+
+        # Configuração final
+        fig.patch.set_facecolor(self.colors['background'])
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.95, bottom=0.05, left=0.05, right=0.95)
         
-        # Linhas de referência Stochastic
-        fig.add_hline(y=80, line_dash="dash", line_color="red", opacity=0.5, row=5, col=1)
-        fig.add_hline(y=20, line_dash="dash", line_color="green", opacity=0.5, row=5, col=1)
+        # Salva a imagem
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight', 
+                   facecolor=self.colors['background'], edgecolor='none')
+        img_buffer.seek(0)
+        plt.close()
         
-        # Configuração do layout
-        fig.update_layout(
-            title=title,
-            template='plotly_dark' if self.theme == 'dark' else 'plotly_white',
-            height=800,
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            xaxis_rangeslider_visible=False
-        )
-        
-        # Configuração dos eixos
-        fig.update_xaxes(
-            title_text="Horário",
-            row=5, col=1
-        )
-        
-        fig.update_yaxes(title_text="Preço", row=1, col=1)
-        fig.update_yaxes(title_text="Volume", row=2, col=1)
-        fig.update_yaxes(title_text="RSI", row=3, col=1, range=[0, 100])
-        fig.update_yaxes(title_text="MACD", row=4, col=1)
-        fig.update_yaxes(title_text="Stoch", row=5, col=1, range=[0, 100])
-        
-        # Converte para imagem
-        img_bytes = fig.to_image(format="png", width=1200, height=800)
-        return img_bytes
+        return img_buffer.getvalue()
     
     def create_simple_chart(self, df, title="Gráfico de Candlestick"):
         """
@@ -248,29 +181,93 @@ class ChartGenerator:
         Returns:
             bytes: Imagem do gráfico em formato PNG
         """
-        fig = go.Figure()
+        # Configura matplotlib
+        plt.style.use('dark_background' if self.theme == 'dark' else 'default')
         
-        fig.add_trace(
-            go.Candlestick(
-                x=df.index,
-                open=df['Open'],
-                high=df['High'],
-                low=df['Low'],
-                close=df['Close'],
-                name='Preço',
-                increasing_line_color=self.colors['up'],
-                decreasing_line_color=self.colors['down']
-            )
-        )
+        # Cria figura
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), 
+                                       gridspec_kw={'height_ratios': [6, 2]})
         
-        fig.update_layout(
-            title=title,
-            template='plotly_dark' if self.theme == 'dark' else 'plotly_white',
-            height=600,
-            xaxis_title="Horário",
-            yaxis_title="Preço",
-            xaxis_rangeslider_visible=False
-        )
+        # Painel 1: Candlesticks
+        for i, (idx, row) in enumerate(df.iterrows()):
+            # Determina cor baseada na direção da vela
+            if row['Close'] >= row['Open']:
+                color = self.colors['up']
+            else:
+                color = self.colors['down']
+            
+            # Desenha a linha vertical (mecha)
+            ax1.plot([idx, idx], [row['Low'], row['High']], color=color, linewidth=1)
+            
+            # Desenha o corpo da vela
+            body_height = abs(row['Close'] - row['Open'])
+            if body_height > 0:
+                # Corpo da vela como retângulo
+                if row['Close'] >= row['Open']:
+                    # Vela de alta (verde)
+                    rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Open']), 
+                                       0.6, body_height, facecolor=color, edgecolor=color, alpha=0.8)
+                    ax1.add_patch(rect)
+                else:
+                    # Vela de baixa (vermelha)
+                    rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Close']), 
+                                       0.6, body_height, facecolor=color, edgecolor=color, alpha=0.8)
+                    ax1.add_patch(rect)
+            else:
+                # Doji - apenas linha horizontal
+                ax1.plot([mdates.date2num(idx) - 0.3, mdates.date2num(idx) + 0.3], 
+                        [row['Open'], row['Open']], color=color, linewidth=2)
         
-        img_bytes = fig.to_image(format="png", width=1000, height=600)
-        return img_bytes 
+        # Configuração do gráfico principal
+        ax1.set_facecolor(self.colors['background'])
+        ax1.grid(True, color=self.colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax1.set_title(title, color=self.colors['text'], fontsize=14, fontweight='bold', pad=20)
+        ax1.set_ylabel('Preço', color=self.colors['text'], fontsize=12)
+        
+        # Remove bordas
+        for spine in ax1.spines.values():
+            spine.set_color(self.colors['border'])
+            spine.set_linewidth(0.5)
+        
+        # Configuração dos ticks
+        ax1.tick_params(colors=self.colors['text'], labelsize=10)
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
+
+        # Painel 2: Volume
+        for i, (idx, row) in enumerate(df.iterrows()):
+            if row['Close'] >= row['Open']:
+                color = self.colors['volume_up']
+            else:
+                color = self.colors['volume_down']
+            
+            if row['Volume'] > 0:
+                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, 0), 
+                                   0.6, row['Volume'], facecolor=color, edgecolor=color, alpha=0.7)
+                ax2.add_patch(rect)
+        
+        ax2.set_ylabel('Volume', color=self.colors['text'], fontsize=10)
+        ax2.set_facecolor(self.colors['background'])
+        ax2.grid(True, color=self.colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        
+        # Remove bordas do volume
+        for spine in ax2.spines.values():
+            spine.set_color(self.colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax2.tick_params(colors=self.colors['text'], labelsize=9)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax2.set_xlabel('Horário', color=self.colors['text'], fontsize=12)
+
+        # Configuração final
+        fig.patch.set_facecolor(self.colors['background'])
+        plt.tight_layout()
+        
+        # Salva a imagem
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight', 
+                   facecolor=self.colors['background'], edgecolor='none')
+        img_buffer.seek(0)
+        plt.close()
+        
+        return img_buffer.getvalue() 
