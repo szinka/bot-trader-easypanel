@@ -640,18 +640,18 @@ def rota_get_grafico():
 @app.route('/grafico_dados', methods=['POST'])
 def rota_grafico_dados():
     """
-    Recebe dados de candles (JSON ou texto) e gera gráfico com visual TradingView.
-    Inclui volume, médias móveis, MACD e indicadores técnicos.
+    Recebe dados de candles (JSON ou texto) e gera gráfico com visual TradingView profissional.
+    Inclui 5 painéis: candlesticks, volume, RSI, MACD, Stochastic.
     """
     try:
         import matplotlib
-        matplotlib.use('Agg')
+        matplotlib.use('Agg')  # Modo headless
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
         import pandas as pd
-        import re
-        import mplfinance as mpf
         import numpy as np
         import io
-        import logging
+        import re
 
         # --- Processamento dos candles ---
         dados = request.get_json(silent=True)
@@ -686,7 +686,7 @@ def rota_grafico_dados():
                 df[col] = df[col].astype(float)
             df.set_index('data', inplace=True)
 
-        # --- Garante que a coluna Volume sempre exista e está na ordem correta ---
+        # --- Garante que a coluna Volume sempre exista ---
         if 'Volume' not in df.columns:
             df['Volume'] = 0.0
         
@@ -700,68 +700,257 @@ def rota_grafico_dados():
         
         if df.empty:
             return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
+
+        # Calcula indicadores técnicos avançados
+        df['SMA_9'] = df['Close'].rolling(window=9).mean()
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
         
-        df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-
-        # --- Média móvel de 9 períodos ---
-        mav = (9,)
-
-        # --- Calcula MACD ---
+        # Bollinger Bands
+        df['BB_20'] = df['Close'].rolling(window=20).mean()
+        df['BB_upper'] = df['BB_20'] + (df['Close'].rolling(window=20).std() * 2)
+        df['BB_lower'] = df['BB_20'] - (df['Close'].rolling(window=20).std() * 2)
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # MACD
         exp12 = df['Close'].ewm(span=12, adjust=False).mean()
         exp26 = df['Close'].ewm(span=26, adjust=False).mean()
-        macd = exp12 - exp26
-        signal = macd.ewm(span=9, adjust=False).mean()
-        macd_hist = macd - signal
-        macd_df = pd.DataFrame({
-            'MACD': macd,
-            'Signal': signal,
-            'Hist': macd_hist
-        }, index=df.index)
-
-        # --- Subplot do MACD ---
-        apds = [
-            mpf.make_addplot(macd_df['MACD'], panel=1, color='cyan', secondary_y=False, ylabel='MACD'),
-            mpf.make_addplot(macd_df['Signal'], panel=1, color='magenta', secondary_y=False),
-            mpf.make_addplot(macd_df['Hist'], panel=1, type='bar', color='dimgray', secondary_y=False)
-        ]
-
-        # --- Customização visual ---
-        mc = mpf.make_marketcolors(
-            up='#26a69a', down='#ef5350',
-            edge='inherit', wick='inherit',
-            volume='in', ohlc='inherit'
+        df['MACD'] = exp12 - exp26
+        df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_Hist'] = df['MACD'] - df['Signal']
+        
+        # Stochastic
+        df['Stoch_K'] = ((df['Close'] - df['Low'].rolling(window=14).min()) / 
+                         (df['High'].rolling(window=14).max() - df['Low'].rolling(window=14).min())) * 100
+        df['Stoch_D'] = df['Stoch_K'].rolling(window=3).mean()
+        
+        # ATR (Average True Range)
+        df['TR'] = np.maximum(
+            df['High'] - df['Low'],
+            np.maximum(
+                abs(df['High'] - df['Close'].shift(1)),
+                abs(df['Low'] - df['Close'].shift(1))
+            )
         )
-        s = mpf.make_mpf_style(
-            base_mpf_style='nightclouds',
-            marketcolors=mc,
-            facecolor='#181c25',
-            edgecolor='#181c25',
-            gridcolor='#444',
-            gridstyle='--',
-            rc={'font.size': 12, 'axes.labelcolor': 'white', 'axes.edgecolor': 'white', 'axes.titlesize': 16, 'axes.titleweight': 'bold', 'xtick.color': 'white', 'ytick.color': 'white'}
-        )
+        df['ATR'] = df['TR'].rolling(window=14).mean()
 
-        import io
+        # Cria figura com layout profissional
+        fig = plt.figure(figsize=(16, 12), facecolor='#0d1117')
+        
+        # Define cores TradingView profissionais
+        colors = {
+            'background': '#0d1117',
+            'grid': '#1f2937',
+            'text': '#e5e7eb',
+            'border': '#374151',
+            'up': '#00c853',
+            'down': '#ff5252',
+            'sma9': '#ff9800',
+            'sma20': '#2196f3',
+            'sma50': '#9c27b0',
+            'bb_upper': '#ff5722',
+            'bb_lower': '#ff5722',
+            'bb_middle': '#ff9800',
+            'rsi': '#00bcd4',
+            'macd': '#00bcd4',
+            'signal': '#ff5722',
+            'stoch': '#ff9800',
+            'volume_up': '#00c853',
+            'volume_down': '#ff5252'
+        }
+
+        # Configuração geral
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+
+        # Layout: 5 painéis organizados
+        gs = fig.add_gridspec(5, 1, height_ratios=[3, 1, 1, 1, 1], hspace=0.05)
+
+        # Painel 1: Candlesticks e indicadores principais
+        ax1 = fig.add_subplot(gs[0])
+        
+        # Plota candlesticks
+        width = 0.6
+        up = df[df.Close >= df.Open]
+        down = df[df.Close < df.Open]
+        
+        # Velas de alta (verde)
+        if not up.empty:
+            ax1.bar(up.index, up.Close - up.Open, width, bottom=up.Open, 
+                   color=colors['up'], alpha=0.8, edgecolor=colors['up'])
+            ax1.bar(up.index, up.High - up.Close, 0.1, bottom=up.Close, 
+                   color=colors['up'], alpha=0.8)
+            ax1.bar(up.index, up.Low - up.Open, 0.1, bottom=up.Open, 
+                   color=colors['up'], alpha=0.8)
+        
+        # Velas de baixa (vermelho)
+        if not down.empty:
+            ax1.bar(down.index, down.Close - down.Open, width, bottom=down.Open, 
+                   color=colors['down'], alpha=0.8, edgecolor=colors['down'])
+            ax1.bar(down.index, down.High - down.Open, 0.1, bottom=down.Open, 
+                   color=colors['down'], alpha=0.8)
+            ax1.bar(down.index, down.Low - down.Close, 0.1, bottom=down.Close, 
+                   color=colors['down'], alpha=0.8)
+        
+        # Médias móveis
+        ax1.plot(df.index, df['SMA_9'], color=colors['sma9'], linewidth=1.5, 
+                label='SMA 9', alpha=0.8)
+        ax1.plot(df.index, df['SMA_20'], color=colors['sma20'], linewidth=1.5, 
+                label='SMA 20', alpha=0.8)
+        ax1.plot(df.index, df['SMA_50'], color=colors['sma50'], linewidth=1.5, 
+                label='SMA 50', alpha=0.8)
+        
+        # Bollinger Bands
+        ax1.plot(df.index, df['BB_upper'], color=colors['bb_upper'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Upper')
+        ax1.plot(df.index, df['BB_lower'], color=colors['bb_lower'], linewidth=1, 
+                alpha=0.6, linestyle='--', label='BB Lower')
+        ax1.plot(df.index, df['BB_20'], color=colors['bb_middle'], linewidth=1, 
+                alpha=0.6, label='BB Middle')
+        
+        # Configuração do gráfico principal
+        ax1.set_facecolor(colors['background'])
+        ax1.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax1.set_title('Análise Técnica Completa - Dados Fornecidos', 
+                     color=colors['text'], fontsize=14, fontweight='bold', pad=20)
+        ax1.set_ylabel('Preço', color=colors['text'], fontsize=12)
+        ax1.legend(loc='upper left', frameon=False, fontsize=9, ncol=3)
+        
+        # Remove bordas
+        for spine in ax1.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        # Configuração dos ticks
+        ax1.tick_params(colors=colors['text'], labelsize=10)
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
+
+        # Painel 2: Volume
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
+        
+        # Volume colorido
+        volume_colors = []
+        for i in range(len(df)):
+            if df['Close'].iloc[i] >= df['Open'].iloc[i]:
+                volume_colors.append(colors['volume_up'])
+            else:
+                volume_colors.append(colors['volume_down'])
+        
+        ax2.bar(df.index, df['Volume'], color=volume_colors, alpha=0.7, width=0.8)
+        ax2.set_ylabel('Volume', color=colors['text'], fontsize=10)
+        ax2.set_facecolor(colors['background'])
+        ax2.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        
+        # Remove bordas do volume
+        for spine in ax2.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax2.tick_params(colors=colors['text'], labelsize=9)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 3: RSI
+        ax3 = fig.add_subplot(gs[2], sharex=ax1)
+        
+        ax3.plot(df.index, df['RSI'], color=colors['rsi'], linewidth=1.5, label='RSI')
+        ax3.axhline(y=70, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
+        ax3.axhline(y=30, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
+        ax3.fill_between(df.index, 70, 100, alpha=0.1, color='red')
+        ax3.fill_between(df.index, 0, 30, alpha=0.1, color='green')
+        
+        ax3.set_ylabel('RSI', color=colors['text'], fontsize=10)
+        ax3.set_ylim(0, 100)
+        ax3.set_facecolor(colors['background'])
+        ax3.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax3.legend(loc='upper left', frameon=False, fontsize=8)
+        
+        # Remove bordas do RSI
+        for spine in ax3.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax3.tick_params(colors=colors['text'], labelsize=9)
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 4: MACD
+        ax4 = fig.add_subplot(gs[3], sharex=ax1)
+        
+        ax4.plot(df.index, df['MACD'], color=colors['macd'], linewidth=1.5, label='MACD')
+        ax4.plot(df.index, df['Signal'], color=colors['signal'], linewidth=1.5, label='Signal')
+        
+        # Histograma MACD
+        macd_colors = []
+        for i in range(len(df)):
+            if df['MACD_Hist'].iloc[i] >= 0:
+                macd_colors.append(colors['up'])
+            else:
+                macd_colors.append(colors['down'])
+        
+        ax4.bar(df.index, df['MACD_Hist'], color=macd_colors, alpha=0.6, width=0.8)
+        
+        # Linha zero
+        ax4.axhline(y=0, color=colors['text'], linestyle='-', linewidth=0.5, alpha=0.5)
+        
+        ax4.set_ylabel('MACD', color=colors['text'], fontsize=10)
+        ax4.set_facecolor(colors['background'])
+        ax4.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax4.legend(loc='upper left', frameon=False, fontsize=8)
+        
+        # Remove bordas do MACD
+        for spine in ax4.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax4.tick_params(colors=colors['text'], labelsize=9)
+        ax4.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Painel 5: Stochastic
+        ax5 = fig.add_subplot(gs[4], sharex=ax1)
+        
+        ax5.plot(df.index, df['Stoch_K'], color=colors['stoch'], linewidth=1.5, label='%K')
+        ax5.plot(df.index, df['Stoch_D'], color=colors['signal'], linewidth=1.5, label='%D')
+        ax5.axhline(y=80, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
+        ax5.axhline(y=20, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
+        ax5.fill_between(df.index, 80, 100, alpha=0.1, color='red')
+        ax5.fill_between(df.index, 0, 20, alpha=0.1, color='green')
+        
+        ax5.set_ylabel('Stoch', color=colors['text'], fontsize=10)
+        ax5.set_xlabel('Horário', color=colors['text'], fontsize=10)
+        ax5.set_ylim(0, 100)
+        ax5.set_facecolor(colors['background'])
+        ax5.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
+        ax5.legend(loc='upper left', frameon=False, fontsize=8)
+        
+        # Remove bordas do Stochastic
+        for spine in ax5.spines.values():
+            spine.set_color(colors['border'])
+            spine.set_linewidth(0.5)
+        
+        ax5.tick_params(colors=colors['text'], labelsize=9)
+        ax5.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        # Ajusta layout
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0.1)
+        
+        # Salva a imagem
         buf = io.BytesIO()
-        mpf.plot(
-            df,
-            type='candle',
-            style=s,
-            figsize=(12, 8),
-            title='Gráfico de Candlestick',
-            ylabel='Preço',
-            ylabel_lower='',
-            xrotation=30,
-            mav=mav,
-            volume=True,
-            addplot=apds,
-            panel_ratios=(3,1),
-            savefig=dict(fname=buf, format='png', facecolor='#181c25', bbox_inches='tight')
-        )
+        plt.savefig(buf, format='png', facecolor=colors['background'], 
+                   edgecolor='none', dpi=150, bbox_inches='tight')
         buf.seek(0)
+        plt.close(fig)
+        
         return send_file(buf, mimetype='image/png')
+        
     except Exception as e:
-        logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
+        logging.error(f"Erro ao gerar gráfico de dados: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 # --- API Status ---
