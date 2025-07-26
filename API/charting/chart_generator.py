@@ -19,68 +19,70 @@ class ChartGenerator:
         self.colors = ChartThemes.get_dark_theme() if theme == 'dark' else ChartThemes.get_light_theme()
     
     def _plot_candlesticks(self, ax, df):
-        """Plota candlesticks de forma otimizada"""
+        """Plota candlesticks de forma otimizada usando plt.bar"""
         # Agrupa dados por cor para melhor performance
         up_data = df[df['Close'] >= df['Open']]
         down_data = df[df['Close'] < df['Open']]
         
         # Plota velas de alta (verde)
-        for idx, row in up_data.iterrows():
-            # Mecha
-            ax.plot([idx, idx], [row['Low'], row['High']], 
-                   color=self.colors['up'], linewidth=1)
+        if not up_data.empty:
+            # Corpos das velas de alta
+            x_pos = [mdates.date2num(idx) for idx in up_data.index]
+            body_heights = up_data['Close'] - up_data['Open']
+            ax.bar(x_pos, body_heights, width=0.6, bottom=up_data['Open'], 
+                   color=self.colors['up'], alpha=0.8, edgecolor=self.colors['up'])
             
-            # Corpo
-            body_height = row['Close'] - row['Open']
-            if body_height > 0:
-                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Open']), 
-                                   0.6, body_height, facecolor=self.colors['up'], 
-                                   edgecolor=self.colors['up'], alpha=0.8)
-                ax.add_patch(rect)
-            else:
-                # Doji
-                ax.plot([mdates.date2num(idx) - 0.3, mdates.date2num(idx) + 0.3], 
-                       [row['Open'], row['Open']], color=self.colors['up'], linewidth=2)
+            # Mechas das velas de alta
+            for idx, row in up_data.iterrows():
+                x_pos = mdates.date2num(idx)
+                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
+                       color=self.colors['up'], linewidth=1)
         
         # Plota velas de baixa (vermelha)
-        for idx, row in down_data.iterrows():
-            # Mecha
-            ax.plot([idx, idx], [row['Low'], row['High']], 
-                   color=self.colors['down'], linewidth=1)
+        if not down_data.empty:
+            # Corpos das velas de baixa
+            x_pos = [mdates.date2num(idx) for idx in down_data.index]
+            body_heights = down_data['Open'] - down_data['Close']
+            ax.bar(x_pos, body_heights, width=0.6, bottom=down_data['Close'], 
+                   color=self.colors['down'], alpha=0.8, edgecolor=self.colors['down'])
             
-            # Corpo
-            body_height = row['Open'] - row['Close']
-            if body_height > 0:
-                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, row['Close']), 
-                                   0.6, body_height, facecolor=self.colors['down'], 
-                                   edgecolor=self.colors['down'], alpha=0.8)
-                ax.add_patch(rect)
-            else:
-                # Doji
-                ax.plot([mdates.date2num(idx) - 0.3, mdates.date2num(idx) + 0.3], 
-                       [row['Open'], row['Open']], color=self.colors['down'], linewidth=2)
+            # Mechas das velas de baixa
+            for idx, row in down_data.iterrows():
+                x_pos = mdates.date2num(idx)
+                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
+                       color=self.colors['down'], linewidth=1)
+        
+        # Plota dojis (quando open == close)
+        doji_data = df[df['Open'] == df['Close']]
+        if not doji_data.empty:
+            for idx, row in doji_data.iterrows():
+                x_pos = mdates.date2num(idx)
+                # Linha horizontal para doji
+                ax.plot([x_pos - 0.3, x_pos + 0.3], [row['Open'], row['Open']], 
+                       color=self.colors['up'], linewidth=2)
+                # Mecha do doji
+                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
+                       color=self.colors['up'], linewidth=1)
     
     def _plot_volume(self, ax, df):
-        """Plota volume de forma otimizada"""
+        """Plota volume de forma otimizada usando plt.bar"""
         # Agrupa dados por cor
         up_data = df[df['Close'] >= df['Open']]
         down_data = df[df['Close'] < df['Open']]
         
         # Volume de alta
-        for idx, row in up_data.iterrows():
-            if row['Volume'] > 0:
-                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, 0), 
-                                   0.6, row['Volume'], facecolor=self.colors['volume_up'], 
-                                   edgecolor=self.colors['volume_up'], alpha=0.7)
-                ax.add_patch(rect)
+        if not up_data.empty:
+            x_pos = [mdates.date2num(idx) for idx in up_data.index]
+            volumes = up_data['Volume']
+            ax.bar(x_pos, volumes, width=0.6, color=self.colors['volume_up'], 
+                   alpha=0.7, edgecolor=self.colors['volume_up'])
         
         # Volume de baixa
-        for idx, row in down_data.iterrows():
-            if row['Volume'] > 0:
-                rect = plt.Rectangle((mdates.date2num(idx) - 0.3, 0), 
-                                   0.6, row['Volume'], facecolor=self.colors['volume_down'], 
-                                   edgecolor=self.colors['volume_down'], alpha=0.7)
-                ax.add_patch(rect)
+        if not down_data.empty:
+            x_pos = [mdates.date2num(idx) for idx in down_data.index]
+            volumes = down_data['Volume']
+            ax.bar(x_pos, volumes, width=0.6, color=self.colors['volume_down'], 
+                   alpha=0.7, edgecolor=self.colors['volume_down'])
     
     def _configure_axis(self, ax, title=None, ylabel=None, show_legend=False, legend_items=None):
         """Configura eixo de forma padronizada"""
