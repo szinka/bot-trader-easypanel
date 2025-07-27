@@ -19,38 +19,34 @@ class ChartGenerator:
         self.colors = ChartThemes.get_dark_theme() if theme == 'dark' else ChartThemes.get_light_theme()
     
     def _plot_candlesticks(self, ax, df):
-        """Plota candlesticks de forma otimizada usando plt.bar"""
+        """Plota candlesticks de forma otimizada usando plt.bar e plt.vlines"""
         # Agrupa dados por cor para melhor performance
         up_data = df[df['Close'] >= df['Open']]
         down_data = df[df['Close'] < df['Open']]
         
         # Plota velas de alta (verde)
         if not up_data.empty:
-            # Corpos das velas de alta
+            # Mechas das velas de alta (linhas verticais)
             x_pos = [mdates.date2num(idx) for idx in up_data.index]
+            ax.vlines(x_pos, up_data['Low'], up_data['High'], 
+                     color=self.colors['up'], linewidth=1)
+            
+            # Corpos das velas de alta (barras)
             body_heights = up_data['Close'] - up_data['Open']
             ax.bar(x_pos, body_heights, width=0.6, bottom=up_data['Open'], 
                    color=self.colors['up'], alpha=0.8, edgecolor=self.colors['up'])
-            
-            # Mechas das velas de alta
-            for idx, row in up_data.iterrows():
-                x_pos = mdates.date2num(idx)
-                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
-                       color=self.colors['up'], linewidth=1)
         
         # Plota velas de baixa (vermelha)
         if not down_data.empty:
-            # Corpos das velas de baixa
+            # Mechas das velas de baixa (linhas verticais)
             x_pos = [mdates.date2num(idx) for idx in down_data.index]
+            ax.vlines(x_pos, down_data['Low'], down_data['High'], 
+                     color=self.colors['down'], linewidth=1)
+            
+            # Corpos das velas de baixa (barras)
             body_heights = down_data['Open'] - down_data['Close']
             ax.bar(x_pos, body_heights, width=0.6, bottom=down_data['Close'], 
                    color=self.colors['down'], alpha=0.8, edgecolor=self.colors['down'])
-            
-            # Mechas das velas de baixa
-            for idx, row in down_data.iterrows():
-                x_pos = mdates.date2num(idx)
-                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
-                       color=self.colors['down'], linewidth=1)
         
         # Plota dojis (quando open == close)
         doji_data = df[df['Open'] == df['Close']]
@@ -61,8 +57,8 @@ class ChartGenerator:
                 ax.plot([x_pos - 0.3, x_pos + 0.3], [row['Open'], row['Open']], 
                        color=self.colors['up'], linewidth=2)
                 # Mecha do doji
-                ax.plot([x_pos, x_pos], [row['Low'], row['High']], 
-                       color=self.colors['up'], linewidth=1)
+                ax.vlines(x_pos, row['Low'], row['High'], 
+                         color=self.colors['up'], linewidth=1)
     
     def _plot_volume(self, ax, df):
         """Plota volume de forma otimizada usando plt.bar"""
@@ -101,7 +97,10 @@ class ChartGenerator:
         
         # Configuração dos ticks
         ax.tick_params(colors=self.colors['text'], labelsize=10)
+        
+        # Configuração específica do eixo X para datas
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=30))  # Ticks a cada 30 minutos
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=0)
         
         # Legenda
