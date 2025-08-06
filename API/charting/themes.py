@@ -1,5 +1,5 @@
 """
-Temas para gráficos financeiros
+Temas de cores para gráficos financeiros
 """
 
 class ChartThemes:
@@ -7,54 +7,52 @@ class ChartThemes:
     
     @staticmethod
     def get_dark_theme():
-        """Tema escuro estilo TradingView"""
+        """Retorna tema dark melhorado"""
         return {
-            'background': '#1e222d',
+            'background': '#1a1a1a',
             'text': '#ffffff',
-            'grid': '#2a2e39',
-            'border': '#2a2e39',
-            'up': '#26a69a',
-            'down': '#ef5350',
-            'volume_up': '#26a69a',
-            'volume_down': '#ef5350',
-            'sma9': '#f39c12',
-            'sma20': '#3498db',
-            'sma50': '#9b59b6',
-            'bb_upper': '#e74c3c',
-            'bb_lower': '#e74c3c',
-            'bb_middle': '#95a5a6',
-            'rsi': '#3498db',
-            'macd': '#f39c12',
-            'signal': '#e74c3c',
-            'histogram_up': '#26a69a',
-            'histogram_down': '#ef5350',
-            'stoch_k': '#3498db',
-            'stoch_d': '#e74c3c'
+            'grid': '#333333',
+            'border': '#444444',
+            
+            # Candlesticks
+            'up': '#00ff88',      # Verde mais vibrante
+            'down': '#ff4444',    # Vermelho mais vibrante
+            
+            # Volume
+            'volume_up': '#00cc66',    # Verde volume
+            'volume_down': '#cc3333',  # Vermelho volume
+            
+            # Indicadores
+            'sma20': '#ffaa00',       # Laranja para SMA 20
+            'sma50': '#00aaff',       # Azul para SMA 50
+            'bb_upper': '#ff66ff',    # Rosa para BB Upper
+            'bb_lower': '#66ffff',    # Ciano para BB Lower
+            'bb_middle': '#ffff66',   # Amarelo para BB Middle
+            'rsi': '#ff88ff',         # Rosa claro para RSI
         }
     
     @staticmethod
     def get_light_theme():
-        """Tema claro"""
+        """Retorna tema light"""
         return {
             'background': '#ffffff',
             'text': '#000000',
-            'grid': '#e0e0e0',
-            'border': '#cccccc',
-            'up': '#4caf50',
-            'down': '#f44336',
-            'volume_up': '#4caf50',
-            'volume_down': '#f44336',
-            'sma9': '#ff9800',
-            'sma20': '#2196f3',
-            'sma50': '#9c27b0',
-            'bb_upper': '#f44336',
-            'bb_lower': '#f44336',
-            'bb_middle': '#757575',
-            'rsi': '#2196f3',
-            'macd': '#ff9800',
-            'signal': '#f44336',
-            'histogram_up': '#4caf50',
-            'histogram_down': '#f44336',
-            'stoch_k': '#2196f3',
-            'stoch_d': '#f44336'
+            'grid': '#cccccc',
+            'border': '#999999',
+            
+            # Candlesticks
+            'up': '#00aa44',
+            'down': '#aa0000',
+            
+            # Volume
+            'volume_up': '#00aa44',
+            'volume_down': '#aa0000',
+            
+            # Indicadores
+            'sma20': '#ff8800',
+            'sma50': '#0088ff',
+            'bb_upper': '#ff0088',
+            'bb_lower': '#0088ff',
+            'bb_middle': '#ffaa00',
+            'rsi': '#ff0088',
         } 

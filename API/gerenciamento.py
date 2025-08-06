@@ -6,27 +6,17 @@ class GerenciamentoNiveis:
         # Sistema de níveis baseado na banca
         self.niveis_entrada = {
             (0, 30): 2.0,
-            (30, 45): 3.0,
-            (45, 60): 4.5,
-            (60, 90): 6.0,
-            (90, 120): 9.0,
-            (120, 170): 12.0,
-            (170, 230): 17.0,
-            (230, 300): 23.0,
-            (300, 450): 30.0,
-            (450, 600): 45.0,
-            (600, 900): 60.0,
-            (900, 1200): 90.0,
-            (1200, 1700): 120.0,
-            (1700, 2300): 170.0,
-            (2300, 3000): 230.0,
-            (3000, 4500): 300.0,
-            (4500, 6000): 300.0,
-            (6000, 9000): 400.0,
-            (9000, 12000): 600.0,
-            (12000, 17000): 900.0,
-            (17000, 23000): 1200.0,
-            (23000, float('inf')): 1500.0
+            (30, 45): 2.0,
+            (45, 60): 2.5,
+            (60, 90): 3.0,
+            (90, 120): 4.5,
+            (120, 170): 6.0,
+            (170, 230): 9.0,
+            (230, 300): 12.0,
+            (300, 450): 15.0,
+            (450, 600): 25.0,
+            (600, 900): 30.0,
+            (900, float('inf')): 45.0 
         }
         # Contadores para estatísticas
         self.wins = 0
@@ -37,7 +27,7 @@ class GerenciamentoNiveis:
         # Encontra o nível correspondente à banca atual
         for (min_banca, max_banca), valor_entrada in self.niveis_entrada.items():
             if min_banca <= banca_atual < max_banca:
-                return round(valor_entrada, 2)
+        return round(valor_entrada, 2)
         
         # Fallback para valores muito altos
         return 1500.0
