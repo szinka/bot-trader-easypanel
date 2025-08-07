@@ -86,68 +86,14 @@ class Trader:
         return self.api.get_balance()
 
     def get_candles(self, ativo, timeframe, quantidade):
-        """Busca candles do ativo na conta selecionada com volume."""
+        """Busca candles do ativo na conta selecionada."""
         if not self.api:
             return None
         try:
-            # Busca os candles da IQ Option
             candles = self.api.get_candles(ativo, timeframe * 60, quantidade, time.time())
-            
-            if not candles:
-                logging.warning(f"Nenhum candle retornado para {ativo}")
-                return None
-            
-            # Debug: mostra estrutura do primeiro candle
-            if candles:
-                first_candle = candles[0]
-                logging.info(f"Estrutura do candle original: {list(first_candle.keys())}")
-                logging.info(f"Primeiro candle: {first_candle}")
-            
-            # Processa os candles para garantir que todos os campos sejam incluídos
-            processed_candles = []
-            for i, candle in enumerate(candles):
-                # Mapeia os campos corretos da IQ Option API
-                processed_candle = {
-                    'from': candle.get('from', candle.get('time', 0)),
-                    'open': float(candle.get('open', candle.get('open_price', 0))),
-                    'high': float(candle.get('max', candle.get('high', candle.get('max_price', 0)))),
-                    'low': float(candle.get('min', candle.get('low', candle.get('min_price', 0)))),
-                    'close': float(candle.get('close', candle.get('close_price', 0))),
-                    'volume': float(candle.get('volume', candle.get('vol', 0)))
-                }
-                
-                # Validação dos dados
-                if processed_candle['high'] == 0 and processed_candle['low'] == 0:
-                    # Se high e low são 0, usa open e close como fallback
-                    processed_candle['high'] = max(processed_candle['open'], processed_candle['close'])
-                    processed_candle['low'] = min(processed_candle['open'], processed_candle['close'])
-                    logging.warning(f"Candle {i}: high/low zerados, usando open/close como fallback")
-                
-                # Garante que high >= max(open, close) e low <= min(open, close)
-                max_price = max(processed_candle['open'], processed_candle['close'])
-                min_price = min(processed_candle['open'], processed_candle['close'])
-                
-                if processed_candle['high'] < max_price:
-                    processed_candle['high'] = max_price
-                    logging.warning(f"Candle {i}: high ajustado para {max_price}")
-                
-                if processed_candle['low'] > min_price:
-                    processed_candle['low'] = min_price
-                    logging.warning(f"Candle {i}: low ajustado para {min_price}")
-                
-                processed_candles.append(processed_candle)
-            
-            logging.info(f"Retornando {len(processed_candles)} candles processados para {ativo}")
-            
-            # Debug: mostra alguns candles processados
-            if processed_candles:
-                sample_candle = processed_candles[0]
-                logging.info(f"Exemplo de candle processado: {sample_candle}")
-            
-            return processed_candles
-            
+            return candles
         except Exception as e:
-            logging.error(f"Erro ao buscar candles para {ativo}: {e}", exc_info=True)
+            logging.error(f"Erro ao buscar candles: {e}")
             return None
 
     def comprar_ativo(self, ativo, valor, acao, duracao):

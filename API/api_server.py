@@ -1,13 +1,10 @@
-# szinka/bot-trader-easypanel/bot-trader-easypanel-7b08e2b809dd38380d631d984c10ad6c7132fcde/API/api_server.py
-
+# API/api_server.py
 from flask import Flask, request, jsonify
 import logging
 import os
 import time
 import decimal
 from dotenv import load_dotenv
-from flask import send_file  # Adiciona importação para envio de arquivos
-import io  # Para buffer de imagem
 
 # Carrega as variáveis de ambiente
 load_dotenv()
@@ -16,7 +13,6 @@ load_dotenv()
 from API.trader import Trader
 from API.gerenciamento import GerenciadorMultiConta
 import API.database as database
-from API.charting import ChartGenerator
 
 # Configuração básica de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -111,7 +107,7 @@ def rota_get_candles():
 
 @app.route('/trade', methods=['POST'])
 def rota_de_trade():
-    """Executa uma operação de trade. O valor de entrada é calculado automaticamente pelo sistema de níveis baseado na banca atual."""
+    """Executa uma operação de trade. O valor de entrada é sempre calculado como porcentagem do saldo atual, conforme informado no input HTTP."""
     try:
         sinal = request.get_json()
         
@@ -120,12 +116,13 @@ def rota_de_trade():
             return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
+        valor_entrada_req = sinal.get('valor_entrada', 'gen')
 
         # Seleciona a conta
         trader.selecionar_conta(tipo_conta)
         moeda = trader.get_moeda_conta()
         saldo_anterior = trader.get_saldo()
-        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior}")
+        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior} e valor de entrada solicitado: {valor_entrada_req}")
         
         # Validação de saldo
         if saldo_anterior <= 0:
@@ -134,9 +131,28 @@ def rota_de_trade():
                 "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: {moeda} {saldo_anterior}"
             }), 400
         
-        # Calcula valor do investimento usando o sistema de níveis
-        valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior)
-        logging.info(f"Valor de entrada calculado pelo sistema de níveis: {valor_investido}")
+        # Define valor do investimento
+        valor_investido = None
+        if isinstance(valor_entrada_req, (int, float)):
+            # Interpreta como porcentagem do saldo
+            valor_investido = round(saldo_anterior * (float(valor_entrada_req) / 100), 2)
+            if valor_investido < 2.0:
+                valor_investido = 2.0
+            if valor_investido > saldo_anterior:
+                logging.warning(f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})")
+                return jsonify({
+                    "status": "erro", 
+                    "mensagem": f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})"
+                }), 400
+        elif valor_entrada_req == 'gen':
+            # Por padrão, usa 10% do saldo
+            valor_investido = round(saldo_anterior * 0.10, 2)
+            if valor_investido < 2.0:
+                valor_investido = 2.0
+            logging.info(f"Valor de entrada padrão (10% do saldo): {valor_investido}")
+        else:
+            logging.warning(f"Valor de entrada inválido recebido: {valor_entrada_req}")
+            return jsonify({"status": "erro", "mensagem": "Valor de entrada inválido."}), 400
 
         # Determina a ação (call/put)
         acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
@@ -319,422 +335,6 @@ def rota_get_saldos():
             "mensagem": f"PRACTICE: ${saldo_practice} | REAL: ${saldo_real}"
         })
     except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-# --- Endpoint para gerar gráfico de candlestick ---
-@app.route('/grafico', methods=['GET'])
-def rota_get_grafico():
-    """Gera e retorna uma imagem de gráfico de candlestick para um ativo com visual TradingView profissional."""
-    try:
-        import pandas as pd
-        import io
-
-        # Parâmetros da requisição
-        ativo = request.args.get('ativo', 'EURUSD-OTC')
-        timeframe = int(request.args.get('timeframe', 1))
-        quantidade = int(request.args.get('quantidade', 100))
-
-        # Busca os candles
-        velas = trader.get_candles(ativo, timeframe, quantidade)
-        if not velas:
-            return jsonify({"status": "erro", "mensagem": "Não foi possível obter os dados das velas."}), 404
-
-        # Processa os dados
-        df = pd.DataFrame(velas)
-        
-        # Força o rename para garantir as colunas corretas
-        rename_map = {}
-        for col in df.columns:
-            if col.lower() == 'from':
-                rename_map[col] = 'Datetime'
-            elif col.lower() == 'open':
-                rename_map[col] = 'Open'
-            elif col.lower() == 'high':
-                rename_map[col] = 'High'
-            elif col.lower() == 'low':
-                rename_map[col] = 'Low'
-            elif col.lower() == 'close':
-                rename_map[col] = 'Close'
-            elif col.lower() == 'volume':
-                rename_map[col] = 'Volume'
-        df.rename(columns=rename_map, inplace=True)
-        df['Datetime'] = pd.to_datetime(df['Datetime'], unit='s')
-        df.set_index('Datetime', inplace=True)
-
-        # Garante que Volume existe
-        if 'Volume' not in df.columns:
-            df['Volume'] = 0.0
-
-        # Verifica se todas as colunas necessárias existem
-        for col in ['Open', 'High', 'Low', 'Close']:
-            if col not in df.columns:
-                return jsonify({"status": "erro", "mensagem": f"Coluna '{col}' não encontrada nos dados."}), 500
-
-        # Converte colunas para float para garantir compatibilidade
-        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # Remove linhas com dados inválidos
-        df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
-        
-        if df.empty:
-            return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
-
-        # Usa o novo gerador de gráficos
-        chart_generator = ChartGenerator(theme='dark')
-        img_bytes = chart_generator.create_candlestick_chart(
-            df, 
-            title=f"Análise Técnica Completa - {ativo}"
-        )
-        
-        # Retorna a imagem
-        img_buffer = io.BytesIO(img_bytes)
-        img_buffer.seek(0)
-        
-        return send_file(img_buffer, mimetype='image/png')
-        
-    except Exception as e:
-        logging.error(f"Erro ao gerar gráfico: {e}")
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-        # Cria figura com layout profissional
-        fig = plt.figure(figsize=(16, 12), facecolor='#0d1117')
-        
-        # Define cores TradingView profissionais
-        colors = {
-            'background': '#0d1117',
-            'grid': '#1f2937',
-            'text': '#e5e7eb',
-            'border': '#374151',
-            'up': '#00c853',
-            'down': '#ff5252',
-            'sma9': '#ff9800',
-            'sma20': '#2196f3',
-            'sma50': '#9c27b0',
-            'bb_upper': '#ff5722',
-            'bb_lower': '#ff5722',
-            'bb_middle': '#ff9800',
-            'rsi': '#00bcd4',
-            'macd': '#00bcd4',
-            'signal': '#ff5722',
-            'stoch': '#ff9800',
-            'volume_up': '#00c853',
-            'volume_down': '#ff5252'
-        }
-
-        # Configuração geral
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['font.family'] = 'DejaVu Sans'
-
-        # Layout: 5 painéis organizados
-        gs = fig.add_gridspec(5, 1, height_ratios=[3, 1, 1, 1, 1], hspace=0.05)
-
-        # Painel 1: Candlesticks e indicadores principais
-        ax1 = fig.add_subplot(gs[0])
-        
-        # Plota candlesticks usando linhas verticais e horizontais
-        for i, (idx, row) in enumerate(df.iterrows()):
-            # Determina cor baseada na direção da vela
-            if row['Close'] >= row['Open']:
-                color = colors['up']
-            else:
-                color = colors['down']
-            
-            # Desenha a linha vertical (mecha)
-            ax1.plot([idx, idx], [row['Low'], row['High']], color=color, linewidth=1)
-            
-            # Desenha o corpo da vela
-            body_height = abs(row['Close'] - row['Open'])
-            if body_height > 0:
-                # Corpo da vela como retângulo
-                if row['Close'] >= row['Open']:
-                    # Vela de alta (verde)
-                    ax1.add_patch(plt.Rectangle(
-                        (idx - width/2, row['Open']), 
-                        width, body_height,
-                        facecolor=color, edgecolor=color, alpha=0.8
-                    ))
-                else:
-                    # Vela de baixa (vermelha)
-                    ax1.add_patch(plt.Rectangle(
-                        (idx - width/2, row['Close']), 
-                        width, body_height,
-                        facecolor=color, edgecolor=color, alpha=0.8
-                    ))
-            else:
-                # Doji - apenas linha horizontal
-                ax1.plot([idx - width/2, idx + width/2], [row['Open'], row['Open']], 
-                        color=color, linewidth=2)
-        
-        # Médias móveis
-        ax1.plot(df.index, df['SMA_9'], color=colors['sma9'], linewidth=1.5, 
-                label='SMA 9', alpha=0.8)
-        ax1.plot(df.index, df['SMA_20'], color=colors['sma20'], linewidth=1.5, 
-                label='SMA 20', alpha=0.8)
-        ax1.plot(df.index, df['SMA_50'], color=colors['sma50'], linewidth=1.5, 
-                label='SMA 50', alpha=0.8)
-        
-        # Bollinger Bands
-        ax1.plot(df.index, df['BB_upper'], color=colors['bb_upper'], linewidth=1, 
-                alpha=0.6, linestyle='--', label='BB Upper')
-        ax1.plot(df.index, df['BB_lower'], color=colors['bb_lower'], linewidth=1, 
-                alpha=0.6, linestyle='--', label='BB Lower')
-        ax1.plot(df.index, df['BB_20'], color=colors['bb_middle'], linewidth=1, 
-                alpha=0.6, label='BB Middle')
-        
-        # Configuração do gráfico principal
-        ax1.set_facecolor(colors['background'])
-        ax1.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax1.set_title(f'{ativo.upper()} - {timeframe}min - Análise Técnica Completa', 
-                     color=colors['text'], fontsize=14, fontweight='bold', pad=20)
-        ax1.set_ylabel('Preço', color=colors['text'], fontsize=12)
-        ax1.legend(loc='upper left', frameon=False, fontsize=9, ncol=3)
-        
-        # Remove bordas
-        for spine in ax1.spines.values():
-            spine.set_color(colors['border'])
-            spine.set_linewidth(0.5)
-        
-        # Configuração dos ticks
-        ax1.tick_params(colors=colors['text'], labelsize=10)
-        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=0)
-
-        # Painel 2: Volume
-        ax2 = fig.add_subplot(gs[1], sharex=ax1)
-        
-        # Volume como barras normais
-        for i, (idx, row) in enumerate(df.iterrows()):
-            # Determina cor baseada na direção do preço
-            if row['Close'] >= row['Open']:
-                color = colors['volume_up']
-            else:
-                color = colors['volume_down']
-            
-            # Desenha barra de volume
-            if row['Volume'] > 0:
-                ax2.add_patch(plt.Rectangle(
-                    (idx - 0.3, 0), 
-                    0.6, row['Volume'],
-                    facecolor=color, edgecolor=color, alpha=0.7
-                ))
-        
-        ax2.set_ylabel('Volume', color=colors['text'], fontsize=10)
-        ax2.set_facecolor(colors['background'])
-        ax2.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        
-        # Remove bordas do volume
-        for spine in ax2.spines.values():
-            spine.set_color(colors['border'])
-            spine.set_linewidth(0.5)
-        
-        ax2.tick_params(colors=colors['text'], labelsize=9)
-        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-        # Painel 3: RSI
-        ax3 = fig.add_subplot(gs[2], sharex=ax1)
-        
-        ax3.plot(df.index, df['RSI'], color=colors['rsi'], linewidth=1.5, label='RSI')
-        ax3.axhline(y=70, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
-        ax3.axhline(y=30, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
-        ax3.fill_between(df.index, 70, 100, alpha=0.1, color='red')
-        ax3.fill_between(df.index, 0, 30, alpha=0.1, color='green')
-        
-        ax3.set_ylabel('RSI', color=colors['text'], fontsize=10)
-        ax3.set_ylim(0, 100)
-        ax3.set_facecolor(colors['background'])
-        ax3.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax3.legend(loc='upper left', frameon=False, fontsize=8)
-        
-        # Remove bordas do RSI
-        for spine in ax3.spines.values():
-            spine.set_color(colors['border'])
-            spine.set_linewidth(0.5)
-        
-        ax3.tick_params(colors=colors['text'], labelsize=9)
-        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-        # Painel 4: MACD
-        ax4 = fig.add_subplot(gs[3], sharex=ax1)
-        
-        ax4.plot(df.index, df['MACD'], color=colors['macd'], linewidth=1.5, label='MACD')
-        ax4.plot(df.index, df['Signal'], color=colors['signal'], linewidth=1.5, label='Signal')
-        
-        # Histograma MACD
-        macd_colors = []
-        for i in range(len(df)):
-            if df['MACD_Hist'].iloc[i] >= 0:
-                macd_colors.append(colors['up'])
-            else:
-                macd_colors.append(colors['down'])
-        
-        ax4.bar(df.index, df['MACD_Hist'], color=macd_colors, alpha=0.6, width=0.8)
-        
-        # Linha zero
-        ax4.axhline(y=0, color=colors['text'], linestyle='-', linewidth=0.5, alpha=0.5)
-        
-        ax4.set_ylabel('MACD', color=colors['text'], fontsize=10)
-        ax4.set_facecolor(colors['background'])
-        ax4.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax4.legend(loc='upper left', frameon=False, fontsize=8)
-        
-        # Remove bordas do MACD
-        for spine in ax4.spines.values():
-            spine.set_color(colors['border'])
-            spine.set_linewidth(0.5)
-        
-        ax4.tick_params(colors=colors['text'], labelsize=9)
-        ax4.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-        # Painel 5: Stochastic
-        ax5 = fig.add_subplot(gs[4], sharex=ax1)
-        
-        ax5.plot(df.index, df['Stoch_K'], color=colors['stoch'], linewidth=1.5, label='%K')
-        ax5.plot(df.index, df['Stoch_D'], color=colors['signal'], linewidth=1.5, label='%D')
-        ax5.axhline(y=80, color='red', linestyle='--', alpha=0.5, label='Sobrecomprado')
-        ax5.axhline(y=20, color='green', linestyle='--', alpha=0.5, label='Sobrevendido')
-        ax5.fill_between(df.index, 80, 100, alpha=0.1, color='red')
-        ax5.fill_between(df.index, 0, 20, alpha=0.1, color='green')
-        
-        ax5.set_ylabel('Stoch', color=colors['text'], fontsize=10)
-        ax5.set_xlabel('Horário', color=colors['text'], fontsize=10)
-        ax5.set_ylim(0, 100)
-        ax5.set_facecolor(colors['background'])
-        ax5.grid(True, color=colors['grid'], linestyle='-', linewidth=0.5, alpha=0.3)
-        ax5.legend(loc='upper left', frameon=False, fontsize=8)
-        
-        # Remove bordas do Stochastic
-        for spine in ax5.spines.values():
-            spine.set_color(colors['border'])
-            spine.set_linewidth(0.5)
-        
-        ax5.tick_params(colors=colors['text'], labelsize=9)
-        ax5.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-        # Ajusta layout
-        plt.tight_layout()
-        plt.subplots_adjust(hspace=0.1)
-        
-        # Salva a imagem
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', facecolor=colors['background'], 
-                   edgecolor='none', dpi=150, bbox_inches='tight')
-        buf.seek(0)
-        plt.close(fig)
-        
-        return send_file(buf, mimetype='image/png')
-        
-    except Exception as e:
-        logging.error(f"Erro ao gerar gráfico: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-@app.route('/grafico_dados', methods=['POST'])
-def rota_grafico_dados():
-    """
-    Recebe dados de candles (JSON ou texto) e gera gráfico com visual TradingView profissional.
-    Inclui 5 painéis: candlesticks, volume, RSI, MACD, Stochastic.
-    """
-    try:
-        import matplotlib
-        matplotlib.use('Agg')  # Modo headless
-        import matplotlib.pyplot as plt
-        import matplotlib.dates as mdates
-        import pandas as pd
-        import numpy as np
-        import io
-        import re
-
-        # --- Processamento dos candles ---
-        dados = request.get_json(silent=True)
-        if dados and 'candles' in dados:
-            candles = dados['candles']
-            # Ordena do mais antigo para o mais recente
-            candles.sort(key=lambda c: pd.to_datetime(c['data']))
-            df = pd.DataFrame(candles)
-            
-            # Converte timestamp para datetime
-            df['data'] = pd.to_datetime(df['data'])
-            
-            # Renomeia colunas
-            df.rename(columns={
-                'abertura': 'Open',
-                'fechamento': 'Close',
-                'maxima': 'High',
-                'minima': 'Low',
-                'volume': 'Volume'
-            }, inplace=True)
-            
-            # Converte colunas numéricas para float ANTES de setar o índice
-            for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            # Garante que Volume existe
-            if 'Volume' not in df.columns:
-                df['Volume'] = 0.0
-            
-            # Remove linhas com dados inválidos ANTES de setar o índice
-            df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
-            
-            if df.empty:
-                return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
-            
-            # Seta o índice por último
-            df.set_index('data', inplace=True)
-        else:
-            texto = request.data.decode('utf-8')
-            padrao = r"Data: ([^,]+), Abertura: ([^,]+), Fechamento: ([^,]+), Máxima: ([^,]+), Mínima: ([^,]+)(?:, Volume: ([^\n]+))?"
-            matches = re.findall(padrao, texto)
-            if not matches:
-                return jsonify({"status": "erro", "mensagem": "Formato de dados inválido."}), 400
-            if len(matches[0]) == 6:
-                df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low', 'Volume'])
-                df['Volume'] = df['Volume'].replace('', '0').astype(float)
-            else:
-                df = pd.DataFrame(matches, columns=['data', 'Open', 'Close', 'High', 'Low'])
-                df['Volume'] = 0.0
-            df['data'] = pd.to_datetime(df['data'])
-            for col in ['Open', 'Close', 'High', 'Low']:
-                df[col] = df[col].astype(float)
-            df.set_index('data', inplace=True)
-
-        # --- Garante que a coluna Volume sempre exista (apenas para o else) ---
-        if 'Volume' not in df.columns:
-            df['Volume'] = 0.0
-        
-        # Converte colunas para float para garantir compatibilidade (apenas para o else)
-        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # Remove linhas com dados inválidos (apenas para o else)
-        df = df.dropna(subset=['Open', 'High', 'Low', 'Close'])
-        
-        if df.empty:
-            return jsonify({"status": "erro", "mensagem": "Não há dados válidos para gerar o gráfico."}), 500
-
-        # Usa o novo gerador de gráficos
-        chart_generator = ChartGenerator(theme='dark')
-        img_bytes = chart_generator.create_candlestick_chart(
-            df,
-            title="Análise Técnica Completa - Dados Fornecidos"
-        )
-        
-        # Retorna a imagem
-        img_buffer = io.BytesIO(img_bytes)
-        img_buffer.seek(0)
-        
-        return send_file(img_buffer, mimetype='image/png')
-        
-    except Exception as e:
-        logging.error(f"Erro ao gerar gráfico de dados: {e}")
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
-        
-
-        
-    except Exception as e:
-        logging.error(f"Erro ao gerar gráfico de dados: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
 # --- API Status ---
