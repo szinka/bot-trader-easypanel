@@ -108,12 +108,28 @@ class Trader:
                 if not self.api.check_connect():
                     logging.error("Conexão perdida com IQ Option e reconexão falhou.")
                     return False, None
+            
+            # Tenta DIGITAL primeiro
+            logging.info("Tentando DIGITAL...")
             if acao.lower() == "call":
-                check, order_id = self.api.buy(valor, ativo, "call", duracao)
+                check, order_id = self.api.buy_digital_spot(ativo, valor, "call", duracao)
             else:
-                check, order_id = self.api.buy(valor, ativo, "put", duracao)
-            logging.info(f"Resultado da compra: {check}, Order ID: {order_id}")
-            return check, order_id
+                check, order_id = self.api.buy_digital_spot(ativo, valor, "put", duracao)
+            
+            if check and order_id != "error":
+                logging.info(f"Ordem DIGITAL executada com sucesso: {check}, Order ID: {order_id}")
+                return check, order_id
+            else:
+                logging.info("DIGITAL falhou, tentando BINÁRIA...")
+                # Tenta BINÁRIA se digital falhou
+                if acao.lower() == "call":
+                    check, order_id = self.api.buy(valor, ativo, "call", duracao)
+                else:
+                    check, order_id = self.api.buy(valor, ativo, "put", duracao)
+                
+                logging.info(f"Resultado da compra BINÁRIA: {check}, Order ID: {order_id}")
+                return check, order_id
+                
         except Exception as e:
             logging.error(f"Erro na compra: {e}")
             return False, None
