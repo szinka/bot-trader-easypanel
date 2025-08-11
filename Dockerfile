@@ -27,4 +27,4 @@ RUN mkdir -p /app/logs
 EXPOSE 8080
 
 # Comando para iniciar a aplicação
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "API.api_server:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "-t", "120", "API.api_server:app"]
