@@ -113,7 +113,10 @@ class Trader:
             return self.trade_locks[key]
 
     def selecionar_conta(self, tipo_conta, tournament_id=None):
-        """Seleciona a conta REAL, PRACTICE ou TOURNAMENT na IQ Option."""
+        """Seleciona a conta REAL, PRACTICE ou TOURNAMENT na IQ Option.
+        Para torneio, tenta primeiro pela string 'TOURNAMENT' (padrão: um torneio ativo por vez).
+        Se falhar e um `tournament_id` for informado, tenta por ID como fallback.
+        """
         if not self.api:
             return False
         conta = tipo_conta.upper()
@@ -123,20 +126,21 @@ class Trader:
             elif conta == "PRACTICE":
                 self.api.change_balance("PRACTICE")
             elif conta == "TOURNAMENT":
-                # melhor esforço: por ID se fornecido, senão por tipo
+                # padrão: tentar selecionar por string 'TOURNAMENT'
                 self.tournament_balance_id = None
-                if tournament_id is not None:
-                    try:
-                        self.api.change_balance(int(tournament_id))
-                        self.tournament_balance_id = int(tournament_id)
-                    except Exception as e:
-                        logging.error(f"Falha ao selecionar torneio por ID: {e}")
-                        return False
-                else:
-                    try:
-                        self.api.change_balance('TOURNAMENT')
-                    except Exception as e:
-                        logging.error(f"Biblioteca não suportou seleção por 'TOURNAMENT': {e}")
+                try:
+                    self.api.change_balance('TOURNAMENT')
+                except Exception as e_first:
+                    # fallback: se foi fornecido um ID numérico tentar por ID
+                    if tournament_id is not None:
+                        try:
+                            self.api.change_balance(int(tournament_id))
+                            self.tournament_balance_id = int(tournament_id)
+                        except Exception as e_id:
+                            logging.error(f"Falha ao selecionar conta de torneio ('TOURNAMENT' e ID): {e_first} | {e_id}")
+                            return False
+                    else:
+                        logging.error(f"Falha ao selecionar conta de torneio por 'TOURNAMENT': {e_first}")
                         return False
             else:
                 logging.error(f"Tipo de conta inválido: {tipo_conta}")

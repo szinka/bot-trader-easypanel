@@ -46,11 +46,7 @@ def rota_get_profile():
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
         tournament_id = request.args.get('tournament_id')
-        if tipo_conta.upper() == 'TOURNAMENT' and tournament_id is not None:
-            try:
-                tournament_id = int(str(tournament_id).strip())
-            except ValueError:
-                return jsonify({"status": "erro", "mensagem": "tournament_id inválido"}), 400
+        # Para torneio: permitir sem ID e tentar por 'TOURNAMENT' (ID é opcional)
         if not trader.selecionar_conta(tipo_conta, tournament_id):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
@@ -68,11 +64,6 @@ def rota_get_saldo():
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
         tournament_id = request.args.get('tournament_id')
-        if tipo_conta.upper() == 'TOURNAMENT' and tournament_id is not None:
-            try:
-                tournament_id = int(str(tournament_id).strip())
-            except ValueError:
-                return jsonify({"status": "erro", "mensagem": "tournament_id inválido"}), 400
         if not trader.selecionar_conta(tipo_conta, tournament_id):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
@@ -133,11 +124,6 @@ def rota_de_trade():
         )
 
         # Seleciona a conta
-        if tipo_conta.upper() == 'TOURNAMENT' and tournament_id is not None:
-            try:
-                tournament_id = int(str(tournament_id).strip())
-            except ValueError:
-                return jsonify({"status": "erro", "mensagem": "tournament_id inválido"}), 400
         if not trader.selecionar_conta(tipo_conta, tournament_id):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
@@ -220,11 +206,6 @@ def rota_get_estado_gerenciador():
     """Estado do gerenciador (stub)."""
     tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
     tournament_id = request.args.get('tournament_id')
-    if tipo_conta.upper() == 'TOURNAMENT' and tournament_id is not None:
-        try:
-            tournament_id = int(str(tournament_id).strip())
-        except ValueError:
-            return jsonify({"status": "erro", "mensagem": "tournament_id inválido"}), 400
     if not trader.selecionar_conta(tipo_conta, tournament_id):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()
@@ -244,11 +225,6 @@ def rota_resetar_historico():
     dados = request.get_json() or {}
     tipo_conta = dados.get('tipo_conta', 'PRACTICE')
     tournament_id = dados.get('tournament_id')
-    if tipo_conta.upper() == 'TOURNAMENT' and tournament_id is not None:
-        try:
-            tournament_id = int(str(tournament_id).strip())
-        except ValueError:
-            return jsonify({"status": "erro", "mensagem": "tournament_id inválido"}), 400
     if not trader.selecionar_conta(tipo_conta, tournament_id):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()
