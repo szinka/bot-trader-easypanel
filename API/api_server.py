@@ -45,9 +45,7 @@ def rota_get_profile():
     """Retorna a moeda da conta selecionada."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        # Suporte a torneio removido: aceitar apenas REAL/PRACTICE
-        if tipo_conta.upper() == 'TOURNAMENT':
-            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
+
         if not trader.selecionar_conta(tipo_conta):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
@@ -64,8 +62,6 @@ def rota_get_saldo():
     """Consulta saldo da conta."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        if tipo_conta.upper() == 'TOURNAMENT':
-            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
         if not trader.selecionar_conta(tipo_conta):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
@@ -115,8 +111,6 @@ def rota_de_trade():
             return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
-        if tipo_conta.upper() == 'TOURNAMENT':
-            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
         # aceita percentuais como: percent_banca, percent, valor_entrada (em % da banca)
         percent_param = (
             sinal.get('percent_banca', None)
@@ -146,18 +140,9 @@ def rota_de_trade():
                 percent_value = float(percent_param)
             except (TypeError, ValueError):
                 return jsonify({"status": "erro", "mensagem": "Percentual inválido."}), 400
-            # regra especial para torneio: padrão 20%, limite 40%
-            if tipo_conta.upper() == 'TOURNAMENT':
-                percent_value = min(percent_value, 40.0)
-                valor_investido = max(round(saldo_anterior * (percent_value/100), 2), 2.0)
-            else:
-                valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior, percent_value)
+            valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior, percent_value)
         else:
-            # padrão: 3% normal; torneio: 20%
-            if tipo_conta.upper() == 'TOURNAMENT':
-                valor_investido = max(round(saldo_anterior * 0.20, 2), 2.0)
-            else:
-                valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior)
+            valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior)
 
         # Determina a ação (call/put)
         # Normaliza ação: aceita call/put, buy/sell, compra/venda
@@ -208,8 +193,6 @@ def rota_get_historico():
 def rota_get_estado_gerenciador():
     """Estado do gerenciador (stub)."""
     tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-    if tipo_conta.upper() == 'TOURNAMENT':
-        return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
     if not trader.selecionar_conta(tipo_conta):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()
@@ -228,8 +211,6 @@ def rota_resetar_historico():
     """Reset de gerenciamento (stub)."""
     dados = request.get_json() or {}
     tipo_conta = dados.get('tipo_conta', 'PRACTICE')
-    if tipo_conta.upper() == 'TOURNAMENT':
-        return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
     if not trader.selecionar_conta(tipo_conta):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()

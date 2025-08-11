@@ -102,7 +102,7 @@ class Trader:
                 self.trade_locks[key] = threading.Lock()
             return self.trade_locks[key]
 
-    def selecionar_conta(self, tipo_conta, tournament_id=None):
+    def selecionar_conta(self, tipo_conta):
         """Seleciona a conta REAL ou PRACTICE na IQ Option."""
         if not self.api:
             return False
