@@ -2,8 +2,6 @@
 from flask import Flask, request, jsonify
 import logging
 import os
-import time
-import decimal
 from dotenv import load_dotenv
 
 # Carrega as variáveis de ambiente
@@ -12,7 +10,6 @@ load_dotenv()
 # Importa os módulos essenciais
 from API.trader import Trader
 from API.gerenciamento import GerenciadorMultiConta
-import API.database as database
 
 # Configuração básica de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,21 +19,16 @@ app = Flask(__name__)
 # --- Inicialização dos Componentes ---
 try:
     trader = Trader()
-    db_conn = database.get_db_connection()
-    database.setup_database(db_conn)
-
+    # Configuração de gerenciamento: valores percentuais
     config_gerenciamento = {
-        'entry_percentage': float(os.getenv('ENTRY_PERCENTAGE', 5.0)),
-        'wins_to_level_up': int(os.getenv('WINS_TO_LEVEL_UP', 5)),
-        'loss_compensation': int(os.getenv('LOSS_COMPENSATION', 1))
+        'entrada_padrao': float(os.getenv('ENTRY_PERCENTAGE', 3.0)),  # % padrão da banca
+        'limite_maximo': float(os.getenv('GERENCIAMENTO_PERCENT', 5.0))  # limite percentual máximo
     }
     
     # Log das configurações carregadas
     logging.info(f"Configurações carregadas:")
-    logging.info(f"  - ENTRY_PERCENTAGE: {os.getenv('ENTRY_PERCENTAGE', 5.0)}%")
-    logging.info(f"  - GERENCIAMENTO_PERCENT: {os.getenv('GERENCIAMENTO_PERCENT', 5.0)}%")
-    logging.info(f"  - WINS_TO_LEVEL_UP: {os.getenv('WINS_TO_LEVEL_UP', 5)}")
-    logging.info(f"  - LOSS_COMPENSATION: {os.getenv('LOSS_COMPENSATION', 1)}")
+    logging.info(f"  - ENTRY_PERCENTAGE: {os.getenv('ENTRY_PERCENTAGE', 3.0)}%")
+    logging.info(f"  - GERENCIAMENTO_PERCENT (limite): {os.getenv('GERENCIAMENTO_PERCENT', 5.0)}%")
     
     # Inicializa o gerenciador multi-conta
     gerenciador_multi = GerenciadorMultiConta(config_gerenciamento)
@@ -53,7 +45,8 @@ def rota_get_profile():
     """Retorna a moeda da conta selecionada."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
+        tournament_id = request.args.get('tournament_id')
+        trader.selecionar_conta(tipo_conta, tournament_id)
         moeda = trader.get_moeda_conta()
         return jsonify({
             "status": "sucesso",
@@ -68,7 +61,8 @@ def rota_get_saldo():
     """Consulta saldo da conta."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
+        tournament_id = request.args.get('tournament_id')
+        trader.selecionar_conta(tipo_conta, tournament_id)
         moeda = trader.get_moeda_conta()
         saldo = trader.get_saldo()
         logging.info(f"Consulta de saldo para conta {tipo_conta} ({moeda})")
@@ -116,13 +110,21 @@ def rota_de_trade():
             return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
-        valor_entrada_req = sinal.get('valor_entrada', 'gen')
+        tournament_id = sinal.get('tournament_id')
+        # aceita percentuais como: percent_banca, percent, valor_entrada (em % da banca)
+        percent_param = (
+            sinal.get('percent_banca', None)
+            if sinal.get('percent_banca', None) is not None else
+            sinal.get('percent', None)
+            if sinal.get('percent', None) is not None else
+            sinal.get('valor_entrada', None)
+        )
 
         # Seleciona a conta
-        trader.selecionar_conta(tipo_conta)
+        trader.selecionar_conta(tipo_conta, tournament_id)
         moeda = trader.get_moeda_conta()
         saldo_anterior = trader.get_saldo()
-        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior} e valor de entrada solicitado: {valor_entrada_req}")
+        logging.info(f"Iniciando trade na conta {tipo_conta} ({moeda}) com saldo de {saldo_anterior} e percentual solicitado: {percent_param}")
         
         # Validação de saldo
         if saldo_anterior <= 0:
@@ -131,33 +133,36 @@ def rota_de_trade():
                 "mensagem": f"Saldo insuficiente na conta {tipo_conta}. Saldo atual: {moeda} {saldo_anterior}"
             }), 400
         
-        # Define valor do investimento
-        valor_investido = None
-        if isinstance(valor_entrada_req, (int, float)):
-            # Interpreta como porcentagem do saldo
-            valor_investido = round(saldo_anterior * (float(valor_entrada_req) / 100), 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            if valor_investido > saldo_anterior:
-                logging.warning(f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})")
-                return jsonify({
-                    "status": "erro", 
-                    "mensagem": f"Valor de entrada calculado ({valor_investido}) excede o saldo disponível ({saldo_anterior})"
-                }), 400
-        elif valor_entrada_req == 'gen':
-            # Por padrão, usa 10% do saldo
-            valor_investido = round(saldo_anterior * 0.10, 2)
-            if valor_investido < 2.0:
-                valor_investido = 2.0
-            logging.info(f"Valor de entrada padrão (10% do saldo): {valor_investido}")
+        # Define valor do investimento pela porcentagem da banca
+        if percent_param is not None:
+            try:
+                percent_value = float(percent_param)
+            except (TypeError, ValueError):
+                return jsonify({"status": "erro", "mensagem": "Percentual inválido."}), 400
+            # regra especial para torneio: padrão 20%, limite 40%
+            if tipo_conta.upper() == 'TOURNAMENT':
+                percent_value = min(percent_value, 40.0)
+                valor_investido = max(round(saldo_anterior * (percent_value/100), 2), 2.0)
+            else:
+                valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior, percent_value)
         else:
-            logging.warning(f"Valor de entrada inválido recebido: {valor_entrada_req}")
-            return jsonify({"status": "erro", "mensagem": "Valor de entrada inválido."}), 400
+            # padrão: 3% normal; torneio: 20%
+            if tipo_conta.upper() == 'TOURNAMENT':
+                valor_investido = max(round(saldo_anterior * 0.20, 2), 2.0)
+            else:
+                valor_investido = gerenciador_multi.get_proxima_entrada(tipo_conta, saldo_anterior)
 
         # Determina a ação (call/put)
-        acao = sinal.get('acao', sinal.get('call', sinal.get('put')))
+        # Normaliza ação: aceita call/put, buy/sell, compra/venda
+        acao_raw = sinal.get('acao', sinal.get('action', sinal.get('call', sinal.get('put'))))
+        acao_map = {
+            'call': 'call', 'buy': 'call', 'comprar': 'call', 'compra': 'call',
+            'put': 'put', 'sell': 'put', 'vender': 'put', 'venda': 'put'
+        }
+        acao_key = str(acao_raw).strip().lower() if acao_raw is not None else None
+        acao = acao_map.get(acao_key)
         if acao not in ['call', 'put']:
-            return jsonify({"status": "erro", "mensagem": "Ação deve ser 'call' ou 'put'"}), 400
+            return jsonify({"status": "erro", "mensagem": "Ação deve ser compra/venda (buy/sell) ou call/put"}), 400
         
         # Executa a ordem
         check, order_id = trader.comprar_ativo(
@@ -165,17 +170,9 @@ def rota_de_trade():
         )
         
         if not check:
-            return jsonify({"status": "erro", "mensagem": "Ordem rejeitada em Binária e Digital"}), 500
+            return jsonify({"status": "erro", "mensagem": "Ordem rejeitada na Binária"}), 500
 
-        # Atualiza gerenciamento após trade
-        if acao in ['call', 'put']:
-            resultado = sinal.get('resultado')
-            if resultado in ['win', 'lose']:
-                gerenciador_multi.processar_resultado(tipo_conta, resultado, saldo_anterior)
-                estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-                winrate = estado.get('winrate', 0)
-                logging.info(f"[{tipo_conta.upper()}] {resultado.capitalize()}! Winrate: {winrate:.2f}%")
-        # Retorna resposta instantânea com informações do trade
+        # Retorna resposta com informações do trade
         return jsonify({
             "status": "sucesso",
             "mensagem": "Trade executado com sucesso!",
@@ -195,109 +192,39 @@ def rota_de_trade():
         logging.error(f"Erro na rota /trade: {e}", exc_info=True)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
-@app.route('/get_historico_trades', methods=['GET'])
 @app.route('/history', methods=['GET'])
 def rota_get_historico():
-    """Busca histórico de trades."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', None)
-        historico = database.get_historico_trades(db_conn, tipo_conta)
-        
-        # Converte campos NUMERIC para float
-        for trade in historico:
-            for key, value in trade.items():
-                if isinstance(value, decimal.Decimal):
-                    trade[key] = float(value)
-        
-        return jsonify({
-            "status": "sucesso", 
-            "historico": historico
-        })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+    """Histórico de trades (stub sem persistência)."""
+    return jsonify({"status": "sucesso", "historico": []})
 
-@app.route('/get_estado_gerenciador', methods=['GET'])
 @app.route('/management', methods=['GET'])
 def rota_get_estado_gerenciador():
-    """Consulta estado do gerenciador (apenas wins/losses e winrate, sem entradas por nível)."""
-    try:
-        tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        banca_atual = trader.get_saldo()
-        gerenciador_multi._get_gerenciador(tipo_conta, banca_atual)  # Garante que existe
-        estado = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-        if estado:
-            return jsonify({"status": "sucesso", "estado": estado})
-        else:
-            return jsonify({
-                "status": "sucesso", 
-                "estado": {
-                    "total_wins": 0,
-                    "total_losses": 0,
-                    "nivel_atual": 1,
-                    "winrate": 0.0
-                }
-            })
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+    """Estado do gerenciador (stub)."""
+    tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
+    tournament_id = request.args.get('tournament_id')
+    trader.selecionar_conta(tipo_conta, tournament_id)
+    _ = trader.get_saldo()
+    return jsonify({
+        "status": "sucesso", 
+        "estado": {
+            "total_wins": 0,
+            "total_losses": 0,
+            "nivel_atual": 1,
+            "winrate": 0.0
+        }
+    })
 
-@app.route('/resetar_historico', methods=['POST'])
 @app.route('/management/reset', methods=['POST'])
 def rota_resetar_historico():
-    """Reseta histórico de trades."""
-    try:
-        dados = request.get_json() or {}
-        tipo_conta = dados.get('tipo_conta', None)
-        
-        # Limpa tabelas
-        database.resetar_historico_trades(db_conn, tipo_conta)
-        database.resetar_estado_gerenciamento(db_conn, tipo_conta)
-        
-        # Reinicia gerenciadores
-        if tipo_conta:
-            trader.selecionar_conta(tipo_conta)
-            banca_atual = trader.get_saldo()
-            gerenciador_multi.resetar_gerenciador(tipo_conta, banca_atual)
-        else:
-            for conta in ['REAL', 'PRACTICE']:
-                try:
-                    trader.selecionar_conta(conta)
-                    banca_atual = trader.get_saldo()
-                    gerenciador_multi.resetar_gerenciador(conta, banca_atual)
-                except Exception as e:
-                    logging.warning(f"Não foi possível resetar gerenciador para {conta}: {e}")
-        
-        mensagem = f"Histórico resetado para {tipo_conta if tipo_conta else 'todas as contas'}."
-        return jsonify({"status": "sucesso", "mensagem": mensagem})
-    except Exception as e:
-        logging.error(f"Erro ao resetar histórico: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+    """Reset de gerenciamento (stub)."""
+    dados = request.get_json() or {}
+    tipo_conta = dados.get('tipo_conta', 'PRACTICE')
+    tournament_id = dados.get('tournament_id')
+    trader.selecionar_conta(tipo_conta, tournament_id)
+    _ = trader.get_saldo()
+    return jsonify({"status": "sucesso", "mensagem": f"Gerenciamento resetado para {tipo_conta}."})
 
-@app.route('/resetar_gerenciamento', methods=['POST'])
-@app.route('/management/reset_gerenciamento', methods=['POST'])
-def rota_resetar_gerenciamento():
-    """Reseta apenas o gerenciamento (tracking de wins/losses)."""
-    try:
-        dados = request.get_json() or {}
-        tipo_conta = dados.get('tipo_conta', 'PRACTICE')
-        trader.selecionar_conta(tipo_conta)
-        banca_atual = trader.get_saldo()
-        database.resetar_estado_gerenciamento(db_conn, tipo_conta)
-        gerenciador_multi.resetar_gerenciador(tipo_conta, banca_atual)
-        estado_apos_reset = gerenciador_multi.get_estado_gerenciador(tipo_conta)
-        mensagem = f"Gerenciamento resetado para {tipo_conta}. Tracking de wins/losses zerado."
-        return jsonify({
-            "status": "sucesso", 
-            "mensagem": mensagem,
-            "dados": {
-                "tipo_conta": tipo_conta,
-                "banca_atual": banca_atual,
-                "estado_apos_reset": estado_apos_reset
-            }
-        })
-    except Exception as e:
-        logging.error(f"Erro ao resetar gerenciamento: {e}", exc_info=True)
-        return jsonify({"status": "erro", "mensagem": str(e)}), 500
+# Endpoint mantido acima: /management/reset (stub)
 
 @app.route('/ping', methods=['GET'])
 @app.route('/status', methods=['GET'])
@@ -349,18 +276,16 @@ def api_status():
             "balance": "/balance", 
             "history": "/history",
             "management": "/management",
-            "reset_management": "/resetar_gerenciamento",
+            "reset_management": "/management/reset",
             "status": "/status"
         }
     })
 
 if __name__ == "__main__":
-    # Logar status inicial da conta REAL (apenas uma vez)
     trader.selecionar_conta('REAL')
     banca_real = trader.get_saldo()
-    estado_real = gerenciador_multi.get_estado_gerenciador('REAL')
-    
+    proxima_entrada = gerenciador_multi.get_proxima_entrada('REAL', banca_real)
     print("\n✅ Server ligado com sucesso")
-    print(f"[Conta: REAL | Banca: ${banca_real} | Wins: {estado_real['total_wins']} | Próxima entrada MK: ${proxima_entrada}]")
+    print(f"[Conta: REAL | Banca: ${banca_real} | Próxima entrada: ${proxima_entrada}]")
     print("Pronto pro trade!\n")
     app.run(host='0.0.0.0', port=8080, debug=False)

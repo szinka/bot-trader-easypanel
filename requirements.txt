@@ -1,7 +1,6 @@
 flask==2.3.3
 requests==2.31.0
 python-dotenv==1.0.0
-psycopg2-binary
 git+https://github.com/Lu-Yi-Hsun/iqoptionapi.git
 websocket-client==0.56.0
 gunicorn==21.2.0

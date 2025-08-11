@@ -10,15 +10,7 @@ services:
     environment:
       - IQ_EMAIL=${IQ_EMAIL}
       - IQ_PASSWORD=${IQ_PASSWORD}
-      - DATABASE_URL=${DATABASE_URL}
-      - DB_HOST=${DB_HOST:-easypanel.allkimy.academy}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_NAME=${DB_NAME:-teste}
-      - DB_USER=${DB_USER:-teste}
-      - DB_PASSWORD=${DB_PASSWORD:-dbfafd3ad79f44b4da88}
-      - ENTRY_PERCENTAGE=${ENTRY_PERCENTAGE:-5.0}
+      - ENTRY_PERCENTAGE=${ENTRY_PERCENTAGE:-3.0}
       - GERENCIAMENTO_PERCENT=${GERENCIAMENTO_PERCENT:-5.0}
-      - WINS_TO_LEVEL_UP=${WINS_TO_LEVEL_UP:-5}
-      - LOSS_COMPENSATION=${LOSS_COMPENSATION:-1}
     volumes:
       - ./logs:/app/logs

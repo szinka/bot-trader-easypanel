@@ -3,6 +3,7 @@ import logging
 import os
 from iqoptionapi.stable_api import IQ_Option
 import time
+import threading
 
 # Lock global para evitar múltiplos logins
 IQ_LOGIN_ATTEMPTED = False
@@ -18,6 +19,12 @@ class Trader:
         global IQ_LOGIN_ATTEMPTED, IQ_LOGIN_SUCCESS, IQ_LOGIN_ERROR
         self.api = None
         self.conta_atual = None
+        self.tournament_balance_id = None
+        self._keepalive_thread = None
+        self._keepalive_stop = threading.Event()
+        self.keepalive_seconds = int(os.getenv('KEEPALIVE_SECONDS', '60') or '60')
+        self.trade_locks = {}
+        self._trade_locks_guard = threading.Lock()
         email = os.getenv('IQ_EMAIL')
         senha = os.getenv('IQ_PASSWORD')
         if not email or not senha:
@@ -50,6 +57,8 @@ class Trader:
                 self.api.change_balance("PRACTICE")
                 saldo = self.api.get_balance()
                 logging.info(f"Saldo inicial (PRACTICE): ${saldo}")
+                # inicia keepalive para manter conexão ativa
+                self._iniciar_keepalive()
             else:
                 logging.critical(f"Falha na conexão com IQ Option: {reason}")
         except Exception as e:
@@ -62,22 +71,82 @@ class Trader:
             check, reason = self.api.connect()
             if check:
                 logging.info("Reconexão bem-sucedida.")
-                if self.conta_atual:
+                if self.conta_atual == 'TOURNAMENT' and self.tournament_balance_id:
+                    try:
+                        self.api.change_balance(self.tournament_balance_id)
+                    except Exception:
+                        logging.warning("Falha ao re-selecionar torneio pelo ID; tentando por tipo.")
+                        try:
+                            self.api.change_balance('TOURNAMENT')
+                        except Exception:
+                            logging.error("Não foi possível re-selecionar conta de torneio.")
+                elif self.conta_atual:
                     self.api.change_balance(self.conta_atual)
             else:
                 logging.critical(f"Falha na reconexão: {reason}")
 
-    def selecionar_conta(self, tipo_conta):
-        """Seleciona a conta REAL ou PRACTICE na IQ Option."""
+    def _keepalive_loop(self):
+        """Mantém a conexão ativa verificando periodicamente e reconectando somente se cair."""
+        if self.keepalive_seconds <= 0:
+            return
+        while not self._keepalive_stop.is_set():
+            try:
+                if self.api and not self.api.check_connect():
+                    self.reconectar()
+            except Exception:
+                logging.debug("Falha ao checar conexão no keepalive.")
+            # intervalo curto o suficiente para estabilidade, sem flood
+            self._keepalive_stop.wait(self.keepalive_seconds)
+
+    def _iniciar_keepalive(self):
+        if self._keepalive_thread and self._keepalive_thread.is_alive():
+            return
+        self._keepalive_thread = threading.Thread(target=self._keepalive_loop, daemon=True)
+        self._keepalive_thread.start()
+
+    def _get_trade_lock(self):
+        """Retorna um lock por conta (REAL/PRACTICE) ou por torneio (TOURNAMENT + ID)."""
+        key = (self.conta_atual, self.tournament_balance_id if self.conta_atual == 'TOURNAMENT' else None)
+        with self._trade_locks_guard:
+            if key not in self.trade_locks:
+                self.trade_locks[key] = threading.Lock()
+            return self.trade_locks[key]
+
+    def selecionar_conta(self, tipo_conta, tournament_id=None):
+        """Seleciona a conta REAL, PRACTICE ou TOURNAMENT na IQ Option."""
         if not self.api:
             return False
-        if tipo_conta.upper() == "REAL":
-            self.api.change_balance("REAL")
-        else:
-            self.api.change_balance("PRACTICE")
-        self.conta_atual = tipo_conta.upper()
-        logging.info(f"Conta alterada para: {self.conta_atual}")
-        return True
+        conta = tipo_conta.upper()
+        try:
+            if conta == "REAL":
+                self.api.change_balance("REAL")
+            elif conta == "PRACTICE":
+                self.api.change_balance("PRACTICE")
+            elif conta == "TOURNAMENT":
+                # melhor esforço: por ID se fornecido, senão por tipo
+                self.tournament_balance_id = None
+                if tournament_id is not None:
+                    try:
+                        self.api.change_balance(int(tournament_id))
+                        self.tournament_balance_id = int(tournament_id)
+                    except Exception as e:
+                        logging.error(f"Falha ao selecionar torneio por ID: {e}")
+                        return False
+                else:
+                    try:
+                        self.api.change_balance('TOURNAMENT')
+                    except Exception as e:
+                        logging.error(f"Biblioteca não suportou seleção por 'TOURNAMENT': {e}")
+                        return False
+            else:
+                logging.error(f"Tipo de conta inválido: {tipo_conta}")
+                return False
+            self.conta_atual = conta
+            logging.info(f"Conta alterada para: {self.conta_atual}")
+            return True
+        except Exception as e:
+            logging.error(f"Erro ao alterar conta: {e}")
+            return False
 
     def get_saldo(self):
         """Retorna o saldo da conta selecionada."""
@@ -101,32 +170,20 @@ class Trader:
         if not self.api:
             return False, None
         try:
-            logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
-            # Reconecta se necessário
-            if not self.api.check_connect():
-                self.reconectar()
+            with self._get_trade_lock():
+                logging.info(f"Executando compra: {acao.upper()} em {ativo} por ${valor}")
+                # Reconecta se necessário
                 if not self.api.check_connect():
-                    logging.error("Conexão perdida com IQ Option e reconexão falhou.")
-                    return False, None
-            
-            # Tenta DIGITAL primeiro
-            logging.info("Tentando DIGITAL...")
-            if acao.lower() == "call":
-                check, order_id = self.api.buy_digital_spot(ativo, valor, "call", duracao)
-            else:
-                check, order_id = self.api.buy_digital_spot(ativo, valor, "put", duracao)
-            
-            if check and order_id != "error":
-                logging.info(f"Ordem DIGITAL executada com sucesso: {check}, Order ID: {order_id}")
-                return check, order_id
-            else:
-                logging.info("DIGITAL falhou, tentando BINÁRIA...")
-                # Tenta BINÁRIA se digital falhou
+                    self.reconectar()
+                    if not self.api.check_connect():
+                        logging.error("Conexão perdida com IQ Option e reconexão falhou.")
+                        return False, None
+                # Tenta BINÁRIA diretamente (removendo digital)
+                logging.info("Executando trade BINÁRIA...")
                 if acao.lower() == "call":
                     check, order_id = self.api.buy(valor, ativo, "call", duracao)
                 else:
                     check, order_id = self.api.buy(valor, ativo, "put", duracao)
-                
                 logging.info(f"Resultado da compra BINÁRIA: {check}, Order ID: {order_id}")
                 return check, order_id
                 

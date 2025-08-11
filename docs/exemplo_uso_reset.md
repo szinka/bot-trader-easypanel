@@ -3,7 +3,7 @@
 ## Endpoint
 
 ```
-POST /resetar_gerenciamento
+POST /management/reset
 Content-Type: application/json
 
 {
@@ -14,27 +14,16 @@ Content-Type: application/json
 ## O que o reset faz:
 1. **Seleciona a conta** especificada (PRACTICE ou REAL)
 2. **Pega o saldo atual** da conta
-3. **Calcula nova entrada** como 10% da banca atual (mínimo R$ 2,00)
-4. **Reseta o gerenciamento**:
-   - Zera total_wins
-   - Remove entradas de níveis superiores
-   - Define nova entrada inicial
-5. **Salva no banco** o novo estado
+3. Stub sem efeito prático (apenas resposta de sucesso)
 
 ## Exemplo de resposta
 ```json
 {
   "status": "sucesso",
-  "mensagem": "Gerenciamento resetado para PRACTICE. Nova entrada: $10.00 (10% de $100.00)",
+  "mensagem": "Gerenciamento resetado para PRACTICE.",
   "dados": {
     "tipo_conta": "PRACTICE",
-    "banca_atual": 100.0,
-    "nova_entrada": 10.0,
-    "estado_apos_reset": {
-      "total_wins": 0,
-      "level_entries": {"1": 10.0},
-      "nivel_atual": 1
-    }
+    
   }
 }
 ```

@@ -36,10 +36,7 @@ def main():
             logging.error("Configure IQ_EMAIL e IQ_PASSWORD no arquivo .env")
             sys.exit(1)
         
-        # Verifica se o banco de dados está configurado
-        if not os.getenv('DATABASE_URL'):
-            logging.warning("⚠️ DATABASE_URL não configurado, usando SQLite")
-            os.environ['DATABASE_URL'] = 'sqlite:///bot_trader.db'
+        # Sem dependência de banco por padrão
         
         logging.info("🚀 Iniciando Bot Trader...")
         logging.info(f"📊 Modo: {'Desenvolvimento' if os.getenv('FLASK_DEBUG') else 'Produção'}")

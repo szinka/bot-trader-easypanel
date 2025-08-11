@@ -9,18 +9,15 @@
 
 ## 🚀 Visão Geral
 
-Bot Trader é uma API REST completa para execução automatizada de trades na IQ Option. O sistema inclui gerenciamento de risco Torre MK, histórico de operações, múltiplas contas (Real/Practice) e interface de monitoramento.
+Bot Trader é uma API REST simples para execução automatizada de trades na IQ Option. O sistema realiza ordens binárias via HTTP, calculando o valor da entrada como percentual da banca (mínimo R$ 2, máximo 5%).
 
 ### ✨ Características
 
-- 🔐 **Autenticação IQ Option** - Conexão segura com a plataforma
-- 💰 **Gerenciamento Torre MK** - Controle automático de entradas com progressão inteligente
-- 📊 **Múltiplas Contas** - Suporte para conta Real e Practice com isolamento completo
-- 🗄️ **Banco PostgreSQL** - Histórico completo de trades
-- 📈 **Monitoramento** - Logs detalhados e métricas
-- 🐳 **Docker Ready** - Deploy simplificado
-- 🌐 **API REST** - Endpoints padronizados
-- 🔄 **Reset de Gerenciamento** - Endpoint para resetar gerenciamento com 5% da banca atual
+- 🔐 **Autenticação IQ Option**
+- 💰 **Gerenciamento por Percentual** (mín. R$ 2, máx. 5%)
+- 📊 **Múltiplas Contas** (REAL, PRACTICE e TORNEIO)
+- 🐳 **Docker Ready**
+- 🌐 **API REST**
 
 ## 📋 Pré-requisitos
 
@@ -69,22 +66,17 @@ docker-compose up -d
 IQ_EMAIL=seu_email@exemplo.com
 IQ_PASSWORD=sua_senha
 
-# Database (OPCIONAL - usa SQLite se não configurado)
-DATABASE_URL=postgres://user:password@host:5432/database?sslmode=disable
-
 # Trading Configuration
-ENTRY_PERCENTAGE=5.0          # % da banca por entrada
-WINS_TO_LEVEL_UP=5            # Wins para subir nível
-LOSS_COMPENSATION=1           # Compensação de perdas
+ENTRY_PERCENTAGE=3.0          # % padrão da banca por entrada
+GERENCIAMENTO_PERCENT=5.0     # Limite máximo de % por entrada
 ```
 
 ### Configurações de Trading
 
 | Parâmetro | Descrição | Padrão |
 |-----------|-----------|--------|
-| `ENTRY_PERCENTAGE` | % da banca por entrada | 5.0% |
-| `WINS_TO_LEVEL_UP` | Wins para subir nível | 5 |
-| `LOSS_COMPENSATION` | Compensação de perdas | 1 |
+| `ENTRY_PERCENTAGE` | % da banca por entrada | 3.0% |
+| `GERENCIAMENTO_PERCENT` | Limite máximo de % por entrada | 5.0% |
 
 ## 🚀 Execução
 
@@ -117,7 +109,7 @@ GET /
     "balance": "/balance",
     "history": "/history",
     "management": "/management",
-    "reset_management": "/resetar_gerenciamento",
+    "reset_management": "/management/reset",
     "status": "/status"
   }
 }
@@ -161,7 +153,7 @@ Content-Type: application/json
   "acao": "call",
   "duracao": 5,
   "tipo_conta": "PRACTICE",
-  "valor_entrada": 10
+  "percent": 3
 }
 ```
 **Resposta:**
@@ -187,25 +179,9 @@ Content-Type: application/json
 ```http
 GET /history?tipo_conta=PRACTICE
 ```
-**Resposta:**
-```json
-{
-  "status": "sucesso",
-  "historico": [
-    {
-      "id": 1,
-      "ativo": "EURUSD-OTC",
-      "acao": "call",
-      "valor_investido": 10.0,
-      "resultado": "win",
-      "lucro": 9.0,
-      "data": "2025-07-19T10:30:00"
-    }
-  ]
-}
-```
+Stub sem persistência: retorna lista vazia.
 
-### ⚙️ Gerenciamento Torre MK
+### ⚙️ Gerenciamento
 ```http
 GET /management?tipo_conta=PRACTICE
 ```
@@ -223,7 +199,7 @@ GET /management?tipo_conta=PRACTICE
 
 ### 🔄 Resetar Gerenciamento
 ```http
-POST /resetar_gerenciamento
+POST /management/reset
 Content-Type: application/json
 
 {
@@ -280,8 +256,7 @@ python tests/test_integration.py
 
 ### Teste do Gerenciamento
 ```bash
-# Testa a lógica do gerenciamento Torre MK
-python .cursor/test_completo_gerenciamento.py
+# Testes unitários de cálculo percentual
 ```
 
 ### Teste de Segurança entre Contas
@@ -328,14 +303,14 @@ curl -X POST http://localhost:8080/trade \
     "acao": "call",
     "duracao": 5,
     "tipo_conta": "PRACTICE",
-    "valor_entrada": 10
+    "percent": 3
   }'
 ```
 
 ### 4. **Resetar Gerenciamento**
 ```bash
 # Reset do gerenciamento pegando 5% da banca atual
-curl -X POST http://localhost:8080/resetar_gerenciamento \
+curl -X POST http://localhost:8080/management/reset \
   -H "Content-Type: application/json" \
   -d '{"tipo_conta": "PRACTICE"}'
 ```
@@ -346,13 +321,13 @@ O bot está pronto para receber sinais via API. Envie POST para `/trade` com:
 - `acao`: "call" ou "put"
 - `duracao`: 1, 5, 15 minutos
 - `tipo_conta`: "PRACTICE" ou "REAL"
-- `valor_entrada`: valor específico ou "gen" para gerenciamento automático
+- `percent`: percentual da banca (default 3%, mínimo R$ 2, máximo 5%)
 
-## 💰 Gerenciamento de Risco - Torre MK
+## 💰 Gerenciamento por Percentual
 
 ### 🎯 Lógica Atualizada
 
-O sistema agora implementa a lógica correta do gerenciamento Torre MK:
+O sistema implementa gerenciamento simples por percentual de banca.
 
 #### **📈 Progressão de Níveis**
 - **5 wins consecutivos** para subir de nível
@@ -386,7 +361,7 @@ Nível 4: $6.75 (+50% sobre nível 3)
 #### **Reset do Gerenciamento**
 ```bash
 # Reset pegando 10% da banca atual (mínimo R$ 2,00)
-curl -X POST http://localhost:8080/resetar_gerenciamento \
+curl -X POST http://localhost:8080/management/reset \
   -H "Content-Type: application/json" \
   -d '{"tipo_conta": "PRACTICE"}'
 ```
@@ -403,10 +378,10 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 
 ## NOVA LÓGICA DE GERENCIAMENTO DE ENTRADA
 
-Agora, o valor de entrada para cada operação é sempre calculado como uma porcentagem do saldo atual da conta (REAL ou PRACTICE), conforme informado no campo `valor_entrada` do input HTTP.
+Agora, o valor de entrada para cada operação é calculado como percentual da banca.
 
-- Se você enviar `"valor_entrada": 10`, a operação usará 10% do saldo atual.
-- Se não informar, será usado o padrão de 10% do saldo.
+- Se você enviar `"percent": 3`, a operação usará 3% do saldo atual.
+- Se não informar, será usado o padrão de 3% do saldo.
 - O valor mínimo de entrada é R$ 2,00.
 - O gerenciamento por nível não influencia mais o valor da operação.
 
@@ -418,7 +393,7 @@ Agora, o valor de entrada para cada operação é sempre calculado como uma porc
   "acao": "call",
   "duracao": 5,
   "tipo_conta": "REAL",
-  "valor_entrada": 15
+  "percent": 3
 }
 ```
 
@@ -435,7 +410,7 @@ Esse exemplo fará uma operação usando 15% do saldo da conta REAL.
 ```env
 IQ_EMAIL=seu_email@iqoption.com
 IQ_PASSWORD=sua_senha
-DATABASE_URL=postgres://user:pass@host:5432/db
+ 
 ENTRY_PERCENTAGE=5.0
 WINS_TO_LEVEL_UP=5
 LOSS_COMPENSATION=1
@@ -495,7 +470,7 @@ curl -X POST http://localhost:8080/trade \
   -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
 
 # Testar reset do gerenciamento
-curl -X POST http://localhost:8080/resetar_gerenciamento \
+curl -X POST http://localhost:8080/management/reset \
   -H "Content-Type: application/json" \
   -d '{"tipo_conta":"PRACTICE"}'
 ```
@@ -544,7 +519,7 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 # NUNCA commite estas variáveis
 IQ_EMAIL=seu_email@iqoption.com
 IQ_PASSWORD=sua_senha
-DATABASE_URL=postgres://user:pass@host:5432/db
+ 
 ```
 
 ## 📞 Suporte
@@ -566,7 +541,7 @@ curl -X POST http://localhost:8080/trade \
   -d '{"ativo":"EURUSD-OTC","acao":"call","duracao":5,"tipo_conta":"PRACTICE","valor_entrada":10}'
 
 # 5. Reset do gerenciamento
-curl -X POST http://localhost:8080/resetar_gerenciamento \
+curl -X POST http://localhost:8080/management/reset \
   -H "Content-Type: application/json" \
   -d '{"tipo_conta":"PRACTICE"}'
 ```
@@ -575,7 +550,7 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 1. **Conexão IQ Option** - Verifique credenciais
 2. **Trade Rejeitado** - Use EURUSD-OTC, verifique saldo
 3. **Deploy Falhou** - Verifique Dockerfile e variáveis
-4. **Banco de Dados** - Configure DATABASE_URL
+4. **Gerenciamento** - Endpoint de reset é stub
 5. **Gerenciamento** - Use endpoint de reset para corrigir
 
 ---
@@ -584,10 +559,10 @@ curl -X POST http://localhost:8080/resetar_gerenciamento \
 
 **🔒 Segurança:** Nunca compartilhe suas credenciais IQ Option.
 
-**💰 Sucesso:** Sistema testado e funcionando com EURUSD-OTC e gerenciamento Torre MK otimizado! 
+**💰 Sucesso:** Sistema testado e funcionando com EURUSD-OTC e gerenciamento por percentual.
 
 **🔄 Atualizações Recentes:**
-- ✅ Lógica do gerenciamento Torre MK corrigida
+ 
 - ✅ 5 wins para subir de nível
 - ✅ Aumento de 50% apenas no UP de nível
 - ✅ Regra de perda com 0 wins implementada
