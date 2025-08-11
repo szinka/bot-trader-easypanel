@@ -45,9 +45,10 @@ def rota_get_profile():
     """Retorna a moeda da conta selecionada."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        tournament_id = request.args.get('tournament_id')
-        # Para torneio: permitir sem ID e tentar por 'TOURNAMENT' (ID é opcional)
-        if not trader.selecionar_conta(tipo_conta, tournament_id):
+        # Suporte a torneio removido: aceitar apenas REAL/PRACTICE
+        if tipo_conta.upper() == 'TOURNAMENT':
+            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
+        if not trader.selecionar_conta(tipo_conta):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
         return jsonify({
@@ -63,8 +64,9 @@ def rota_get_saldo():
     """Consulta saldo da conta."""
     try:
         tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-        tournament_id = request.args.get('tournament_id')
-        if not trader.selecionar_conta(tipo_conta, tournament_id):
+        if tipo_conta.upper() == 'TOURNAMENT':
+            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
+        if not trader.selecionar_conta(tipo_conta):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
         saldo = trader.get_saldo()
@@ -113,7 +115,8 @@ def rota_de_trade():
             return jsonify({"status": "erro", "mensagem": "Campos obrigatórios: ativo, acao/call/put, duracao"}), 400
         
         tipo_conta = sinal.get('tipo_conta', 'PRACTICE')
-        tournament_id = sinal.get('tournament_id')
+        if tipo_conta.upper() == 'TOURNAMENT':
+            return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
         # aceita percentuais como: percent_banca, percent, valor_entrada (em % da banca)
         percent_param = (
             sinal.get('percent_banca', None)
@@ -124,7 +127,7 @@ def rota_de_trade():
         )
 
         # Seleciona a conta
-        if not trader.selecionar_conta(tipo_conta, tournament_id):
+        if not trader.selecionar_conta(tipo_conta):
             return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
         moeda = trader.get_moeda_conta()
         saldo_anterior = trader.get_saldo()
@@ -205,8 +208,9 @@ def rota_get_historico():
 def rota_get_estado_gerenciador():
     """Estado do gerenciador (stub)."""
     tipo_conta = request.args.get('tipo_conta', 'PRACTICE')
-    tournament_id = request.args.get('tournament_id')
-    if not trader.selecionar_conta(tipo_conta, tournament_id):
+    if tipo_conta.upper() == 'TOURNAMENT':
+        return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
+    if not trader.selecionar_conta(tipo_conta):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()
     return jsonify({
@@ -224,8 +228,9 @@ def rota_resetar_historico():
     """Reset de gerenciamento (stub)."""
     dados = request.get_json() or {}
     tipo_conta = dados.get('tipo_conta', 'PRACTICE')
-    tournament_id = dados.get('tournament_id')
-    if not trader.selecionar_conta(tipo_conta, tournament_id):
+    if tipo_conta.upper() == 'TOURNAMENT':
+        return jsonify({"status": "erro", "mensagem": "Conta de torneio não é suportada"}), 400
+    if not trader.selecionar_conta(tipo_conta):
         return jsonify({"status": "erro", "mensagem": "Falha ao selecionar conta"}), 400
     _ = trader.get_saldo()
     return jsonify({"status": "sucesso", "mensagem": f"Gerenciamento resetado para {tipo_conta}."})

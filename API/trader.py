@@ -19,7 +19,6 @@ class Trader:
         global IQ_LOGIN_ATTEMPTED, IQ_LOGIN_SUCCESS, IQ_LOGIN_ERROR
         self.api = None
         self.conta_atual = None
-        self.tournament_balance_id = None
         self._keepalive_thread = None
         self._keepalive_stop = threading.Event()
         self.keepalive_seconds = int(os.getenv('KEEPALIVE_SECONDS', '60') or '60')
@@ -71,16 +70,7 @@ class Trader:
             check, reason = self.api.connect()
             if check:
                 logging.info("Reconexão bem-sucedida.")
-                if self.conta_atual == 'TOURNAMENT' and self.tournament_balance_id:
-                    try:
-                        self.api.change_balance(self.tournament_balance_id)
-                    except Exception:
-                        logging.warning("Falha ao re-selecionar torneio pelo ID; tentando por tipo.")
-                        try:
-                            self.api.change_balance('TOURNAMENT')
-                        except Exception:
-                            logging.error("Não foi possível re-selecionar conta de torneio.")
-                elif self.conta_atual:
+                if self.conta_atual:
                     self.api.change_balance(self.conta_atual)
             else:
                 logging.critical(f"Falha na reconexão: {reason}")
@@ -105,18 +95,15 @@ class Trader:
         self._keepalive_thread.start()
 
     def _get_trade_lock(self):
-        """Retorna um lock por conta (REAL/PRACTICE) ou por torneio (TOURNAMENT + ID)."""
-        key = (self.conta_atual, self.tournament_balance_id if self.conta_atual == 'TOURNAMENT' else None)
+        """Retorna um lock por conta (REAL/PRACTICE)."""
+        key = (self.conta_atual, None)
         with self._trade_locks_guard:
             if key not in self.trade_locks:
                 self.trade_locks[key] = threading.Lock()
             return self.trade_locks[key]
 
     def selecionar_conta(self, tipo_conta, tournament_id=None):
-        """Seleciona a conta REAL, PRACTICE ou TOURNAMENT na IQ Option.
-        Para torneio, tenta primeiro pela string 'TOURNAMENT' (padrão: um torneio ativo por vez).
-        Se falhar e um `tournament_id` for informado, tenta por ID como fallback.
-        """
+        """Seleciona a conta REAL ou PRACTICE na IQ Option."""
         if not self.api:
             return False
         conta = tipo_conta.upper()
@@ -125,23 +112,6 @@ class Trader:
                 self.api.change_balance("REAL")
             elif conta == "PRACTICE":
                 self.api.change_balance("PRACTICE")
-            elif conta == "TOURNAMENT":
-                # padrão: tentar selecionar por string 'TOURNAMENT'
-                self.tournament_balance_id = None
-                try:
-                    self.api.change_balance('TOURNAMENT')
-                except Exception as e_first:
-                    # fallback: se foi fornecido um ID numérico tentar por ID
-                    if tournament_id is not None:
-                        try:
-                            self.api.change_balance(int(tournament_id))
-                            self.tournament_balance_id = int(tournament_id)
-                        except Exception as e_id:
-                            logging.error(f"Falha ao selecionar conta de torneio ('TOURNAMENT' e ID): {e_first} | {e_id}")
-                            return False
-                    else:
-                        logging.error(f"Falha ao selecionar conta de torneio por 'TOURNAMENT': {e_first}")
-                        return False
             else:
                 logging.error(f"Tipo de conta inválido: {tipo_conta}")
                 return False
